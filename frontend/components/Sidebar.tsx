@@ -1,8 +1,9 @@
 'use client';
-import React, { useState } from 'react';
+import React from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { LayoutDashboard, Receipt, Shield, MessageSquare, Settings, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useSidebar } from '@/contexts/SidebarContext';
 
 interface NavItem {
   name: string;
@@ -11,7 +12,7 @@ interface NavItem {
 }
 
 const Sidebar = () => {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const { isCollapsed, setIsCollapsed } = useSidebar();
   const pathname = usePathname();
 
   const navItems: NavItem[] = [
@@ -23,7 +24,7 @@ const Sidebar = () => {
 
   return (
     <div 
-      className={`relative h-screen bg-[#1a2332] border-r border-[#2d3748] transition-all duration-300 ease-in-out ${
+      className={`fixed left-0 top-0 h-screen bg-black border-r border-gray-500 transition-all duration-300 ease-in-out z-40 ${
         isCollapsed ? 'w-20' : 'w-64'
       }`}
     >

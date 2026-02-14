@@ -1,4 +1,5 @@
 import { RegisterOptions } from "module";
+import type { LucideIcon } from "lucide-react";
 
 declare global {
     type FormInputProps = {
@@ -16,6 +17,13 @@ declare global {
         text: string;
         linkText: string;
         href: string;
+    }
+
+    type StatsProps = {
+        title: string;
+        icon: LucideIcon;
+        value: string;
+        info: string;
     }
 }
 
