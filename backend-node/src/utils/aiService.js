@@ -12,6 +12,7 @@ Total Debit: ${summary.totalDebit}
 Balance: ${summary.balance}
 Category Spending: ${JSON.stringify(summary.categoryMap)}
 Suspicious Transactions: ${summary.suspiciousCount}
+name: ${summary.name}
 
 User Question:
 ${question}
