@@ -8,6 +8,7 @@ const transactionSchema = new mongoose.Schema({
     amount: Number,
     category: String,
     merchant: String,
+    name: String,
     type: {
         type: String,
         enum: ['credit', 'debit']
