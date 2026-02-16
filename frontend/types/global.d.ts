@@ -25,6 +25,16 @@ declare global {
         value: string;
         info: string;
     }
+
+    type ChatInputProps = {
+        onSendMessage: (message: string) => void
+        disabled?: boolean
+    }
+
+    type MessageListProps = {
+        messages: Message[]
+        isLoading?: boolean
+    }
 }
 
 export {}

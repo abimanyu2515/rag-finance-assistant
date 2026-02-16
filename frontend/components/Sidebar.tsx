@@ -18,7 +18,7 @@ const Sidebar = () => {
   const navItems: NavItem[] = [
     { name: 'Dashboard', icon: <LayoutDashboard size={20} />, href: '/dashboard' },
     { name: 'Transactions', icon: <Receipt size={20} />, href: '/transactions' },
-    { name: 'Fraud Detection', icon: <Shield size={20} />, href: '/fraud-detection' },
+    // { name: 'Fraud Detection', icon: <Shield size={20} />, href: '/fraud-detection' },
     { name: 'AI Assistant', icon: <MessageSquare size={20} />, href: '/ai-assistant' },
   ];
 
@@ -41,7 +41,7 @@ const Sidebar = () => {
       {/* Collapse Button */}
       <button
         onClick={() => setIsCollapsed(!isCollapsed)}
-        className="absolute -right-3 top-24 bg-[#6366f1] text-white rounded-full p-1.5 shadow-lg hover:bg-[#5558e3] transition-colors z-10"
+        className="absolute -right-3 top-24 bg-[#6366f1] text-white rounded-full p-1.5 shadow-lg hover:bg-[#5558e3] transition-colors cursor-pointer z-10"
       >
         {isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
       </button>
