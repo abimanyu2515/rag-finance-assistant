@@ -13,12 +13,15 @@ export const generateAIResponse = async (relevantTransactions, question, summary
 You are a financial assistant.
 Answer based only on the provided data.
 
+${transactionContext}
+
 Financial Summary:
 Total Credit: ${summary.totalCredit}
 Total Debit: ${summary.totalDebit}
 Balance: ${summary.balance}
 Category Spending: ${JSON.stringify(summary.categoryMap)}
 Suspicious Transactions: ${summary.suspiciousCount}
+Merchants: ${summary.merchants.length > 0 ? summary.merchants.join(", ") : "None"}
 name: ${summary.name}
 
 User Question:

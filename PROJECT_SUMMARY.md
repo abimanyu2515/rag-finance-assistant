@@ -2,7 +2,7 @@
 
 ## Overview
 
-**RAG Finance Assistant** is a full-stack personal finance web application powered by an AI chatbot. Users can view their financial dashboard, browse transactions, and chat with an AI assistant that answers questions based on their actual transaction data. The AI uses a Retrieval-Augmented Generation (RAG) pattern — it builds a financial summary from the user's transactions and injects it as context into every prompt sent to a local LLM (Mistral via Ollama).
+**RAG Finance Assistant** is a full-stack personal finance web application powered by an AI chatbot. Users can view their financial dashboard, browse transactions, and chat with an AI assistant that answers questions based on their actual transaction data. The AI uses a full Retrieval-Augmented Generation (RAG) pipeline — transactions are embedded and stored in a Qdrant vector database, semantically retrieved per query, and injected as context into prompts sent to a local LLM (Mistral via Ollama).
 
 ---
 
@@ -16,6 +16,11 @@
 │  NextAuth (JWT sessions)     │       │  ┌──────────────────────────┐   │
 └─────────────────────────────┘       │  │  Ollama (local LLM)       │   │
                                        │  │  Model: Mistral           │   │
+                                       │  └──────────────────────────┘   │
+                                       │                                  │
+                                       │  ┌──────────────────────────┐   │
+                                       │  │  Qdrant (vector DB)       │   │
+                                       │  │  Embed: nomic-embed-text  │   │
                                        │  └──────────────────────────┘   │
                                        └────────────────────────────────┘
 ```
@@ -32,6 +37,8 @@
 | Auth (Frontend) | NextAuth v4 (JWT) |
 | Backend | Node.js, Express 5 (ESM) |
 | Database | MongoDB via Mongoose |
+| Vector Database | Qdrant (local) |
+| Embeddings | Ollama — nomic-embed-text (768-dim) |
 | AI / LLM | Ollama running Mistral locally |
 | HTTP Client | Axios (backend → Ollama) |
 | Password Hashing | bcryptjs |
@@ -61,8 +68,11 @@ rag-finance-assistant/
 │       │   ├── chatRoutes.js
 │       │   └── conversationRoutes.js
 │       └── utils/
-│           ├── aiService.js        # Builds prompt + calls Ollama
-│           └── financialSummary.js # Aggregates transactions into a summary
+│           ├── aiService.js           # Builds prompt + calls Ollama
+│           ├── embedService.js        # Embeds text via nomic-embed-text (Ollama)
+│           ├── financialSummary.js    # Aggregates transactions → summary + merchants
+│           ├── ingestTransactions.js  # Embeds & upserts a transaction into Qdrant
+│           └── retrieveContext.js     # Semantic search in Qdrant filtered by userId
 │
 └── frontend/
     ├── app/
@@ -110,14 +120,12 @@ rag-finance-assistant/
 
 ### 4. AI Assistant (RAG Chatbot)
 - User types a question; the frontend POSTs to `/api/chat` with the message and an optional `conversationId`.
-- The backend:
-  1. Fetches all of the user's transactions from MongoDB.
-  2. Runs `buildFinancialSummary()` to compute total credit, total debit, balance, per-category spending, and suspicious transaction count.
-  3. Builds a structured prompt injecting the summary as context.
-  4. Calls **Ollama** (local Mistral model) for a response.
-  5. Persists the full conversation (user + assistant turns) to MongoDB.
-  6. Returns the AI reply and the `conversationId`.
-- The frontend renders the conversation and saves the `conversationId` for follow-up turns.
+- The backend runs a full **3-stage RAG pipeline**:
+  1. **Embed** — the user's message is embedded via `nomic-embed-text` (Ollama).
+  2. **Retrieve** — Qdrant is searched for the top-8 semantically relevant transactions belonging to the user (filtered by `userId`).
+  3. **Generate** — a prompt is built with the retrieved transactions + a financial summary (total credit/debit, balance, per-category spending, all merchant names, suspicious count) and sent to **Ollama** (Mistral).
+- The full conversation (user + assistant turns) is persisted to MongoDB.
+- Returns the AI reply and the `conversationId` to the frontend.
 
 ### 5. Conversation History (Sidebar)
 - The **Sidebar** fetches the user's past conversations from `/api/conversations?userId=...`.
@@ -170,13 +178,17 @@ rag-finance-assistant/
 User Message
      │
      ▼
-Fetch user's Transactions from MongoDB
+embedText()  →  768-dim vector  (nomic-embed-text via Ollama)
      │
      ▼
-buildFinancialSummary()  →  { totalCredit, totalDebit, balance, categoryMap, suspiciousCount }
+Qdrant semantic search  →  top-8 transactions filtered by userId
      │
      ▼
-Construct Prompt  =  "You are a financial assistant..." + Summary + User Question
+Transaction.find({ userId })  →  buildFinancialSummary()
+     │                            { totalCredit, totalDebit, balance,
+     │                              categoryMap, merchants[], suspiciousCount }
+     ▼
+Construct Prompt  =  Retrieved Transactions + Financial Summary + User Question
      │
      ▼
 POST to Ollama /api/generate  (model: mistral, stream: false)
@@ -212,10 +224,14 @@ NEXTAUTH_URL=<frontend url>
 |---|---|
 | Auth (register/login) | ✅ Complete |
 | JWT-protected API | ✅ Complete |
-| AI Chatbot (RAG) | ✅ Complete |
+| Transaction ingestion into Qdrant | ✅ Complete |
+| Semantic retrieval (Qdrant + userId filter) | ✅ Complete |
+| AI Chatbot (full RAG pipeline) | ✅ Complete |
+| Financial summary with merchants | ✅ Complete |
 | Conversation History & Sidebar | ✅ Complete |
 | Dashboard UI | ✅ (mock data) |
 | Transactions UI | ✅ (mock data) |
 | Dashboard/Transactions live data | 🔲 Not yet wired |
+| Conversation history in AI prompt | 🔲 Not implemented (AI is stateless per message) |
 | Fraud Detection | 🔲 Stub only |
 | App Settings | 🔲 Stub only |

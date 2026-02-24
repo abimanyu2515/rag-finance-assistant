@@ -1,5 +1,5 @@
-import { qdrantClient } from "../config/qdrant";
-import { embedText } from "./embedService";
+import { qdrantClient } from "../config/qdrant.js";
+import { embedText } from "./embedService.js";
 
 const COLLECTION_NAME = 'transactions';
 
@@ -18,7 +18,7 @@ export const ingestTransaction = async (tx) => {
                     vector,
                     payload: {
                         mongoId: tx._id.toString(),
-                        userID: tx.userID.toString(),
+                        userId: tx.userId.toString(),
                         amount: tx.amount,
                         category: tx.category,
                         merchant: tx.merchant,

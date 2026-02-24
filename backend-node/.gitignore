@@ -32,3 +32,5 @@ Thumbs.db
 # Misc
 .cache/
 *.log
+
+REINGEST_GUIDE.md

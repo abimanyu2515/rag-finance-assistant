@@ -4,11 +4,14 @@ export const buildFinancialSummary = (transactions) => {
   let categoryMap = {};
   let suspiciousCount = 0;
   let name = "Unkonwn";
+  let merchants = new Set();
   
   transactions.forEach(tx => {
     if (tx.type === "credit") totalCredit += tx.amount;
     else totalDebit += tx.amount;
     name = tx.name || name; // Use the name from transaction if available
+
+    if (tx.merchant) merchants.add(tx.merchant);
 
     if (tx.type === "debit") {
       categoryMap[tx.category] =
@@ -26,6 +29,7 @@ export const buildFinancialSummary = (transactions) => {
     balance,
     categoryMap,
     name,
-    suspiciousCount
+    suspiciousCount,
+    merchants: [...merchants]
   };
 };
