@@ -5,6 +5,7 @@ import { embedText } from "../utils/embedService.js";
 import { generateAIResponse } from "../utils/aiService.js";
 import { retrieveRelevantTransactions } from "../utils/retrieveContext.js";
 import { buildFinancialSummary } from "../utils/financialSummary.js";
+import { detectTemporalIntent } from "../utils/intentDetector.js";
 
 export const chatWithAI = async (req, res) => {
   const userId = req.user?.id || req.body.userId;
@@ -51,7 +52,7 @@ export const chatWithAI = async (req, res) => {
     }
 
     // Get recent history BEFORE pushing current user message
-    const recentHistory = conversation.messages.slice(-10);
+    const recentHistory = conversation.messages.slice(-4);
 
     // Save user message
     conversation.messages.push({
@@ -60,17 +61,45 @@ export const chatWithAI = async (req, res) => {
       timestamp: new Date(),
     });
 
-    // ───────── RAG PIPELINE (parallelized) ─────────
-    // embedText and DB fetch run concurrently; vector search follows once we have the embedding
-    const [queryEmbedding, allTransactions] = await Promise.all([
-      embedText(message),
-      Transaction.find({ userId: userObjectId }).sort({ timestamp: -1 }).limit(100),
-    ]);
+    // ───────── INTENT DETECTION ─────────
+    const temporalIntent = detectTemporalIntent(message);
 
-    const [relevantTransactions, summary] = await Promise.all([
-      retrieveRelevantTransactions(userObjectId, queryEmbedding),
-      Promise.resolve(buildFinancialSummary(allTransactions)),
-    ]);
+    let relevantTransactions;
+    let summary;
+
+    if (temporalIntent.isTemporal) {
+      // Temporal query — bypass Qdrant, use date-sorted MongoDB results
+      const sortOrder = temporalIntent.order === "asc" ? 1 : -1;
+
+      const [temporalTxns, allTransactions] = await Promise.all([
+        Transaction.find({ userId: userObjectId })
+          .sort({ timestamp: sortOrder })
+          .limit(temporalIntent.count)
+          .lean(),
+        Transaction.find({ userId: userObjectId })
+          .sort({ timestamp: -1 })
+          .limit(100),
+      ]);
+
+      relevantTransactions = temporalTxns.map((tx) => ({
+        ...tx,
+        relevanceScore: 1.0,
+      }));
+      summary = buildFinancialSummary(allTransactions);
+    } else {
+      // ───────── RAG PIPELINE (parallelized) ─────────
+      const [queryEmbedding, allTransactions] = await Promise.all([
+        embedText(message),
+        Transaction.find({ userId: userObjectId })
+          .sort({ timestamp: -1 })
+          .limit(100),
+      ]);
+
+      [relevantTransactions, summary] = await Promise.all([
+        retrieveRelevantTransactions(userObjectId, queryEmbedding),
+        Promise.resolve(buildFinancialSummary(allTransactions)),
+      ]);
+    }
 
     // Send conversationId early to frontend
     res.write(
