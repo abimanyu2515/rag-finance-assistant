@@ -160,25 +160,6 @@ const Sidebar = () => {
             />
           )}
         </div>
-
-        {/* Settings */}
-        <div className="px-3">
-          <Link
-              key="Settings"
-              href="/app-settings"
-              className={`w-full flex items-center gap-4 px-4 py-3 rounded-lg transition-all duration-200 ${
-                pathname === '/app-settings'
-                  ? 'bg-[#6366f1] text-white'
-                  : 'text-gray-400 hover:bg-[#2d3748] hover:text-white'
-              } ${isCollapsed ? 'justify-center' : ''}`}
-              title={isCollapsed ? 'Settings' : ''}
-            >
-              <span className="flex shrink-0"><Settings size={20} /></span>
-              {!isCollapsed && (
-                <span className="text-sm font-medium whitespace-nowrap">Settings</span>
-              )}
-            </Link>
-        </div>
       </nav>
     </div>
   );
