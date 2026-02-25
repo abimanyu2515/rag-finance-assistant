@@ -37,8 +37,12 @@ export const retrieveRelevantTransactions = async (
 
   // Each result has: { id, score, payload }
   // We only need the payload (transaction metadata)
-  return results.map((r) => ({
-    ...r.payload,
-    relevanceScore: r.score,      // cosine similarity score (0–1), useful for debugging
-  }));
+  // Filter out low-relevance results to avoid injecting noise into the prompt
+  const MIN_SCORE = 0.45;
+  return results
+    .filter((r) => r.score >= MIN_SCORE)
+    .map((r) => ({
+      ...r.payload,
+      relevanceScore: r.score,      // cosine similarity score (0–1), useful for debugging
+    }));
 };

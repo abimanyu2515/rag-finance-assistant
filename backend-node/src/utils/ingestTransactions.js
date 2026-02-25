@@ -31,6 +31,7 @@ export const ingestTransaction = async (tx) => {
         })
         console.log(`Ingested transaction ${tx._id} into Qdrant`)
     } catch (e) {
-        console.error('Error ingesting transactions:', e);
+        console.error(`Error ingesting transaction ${tx._id}:`, e.message);
+        throw e;
     }
 }

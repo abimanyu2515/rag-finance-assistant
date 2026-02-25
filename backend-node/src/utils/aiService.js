@@ -1,6 +1,6 @@
 import axios from "axios";
 
-export const generateAIResponse = async (relevantTransactions, question, summary, res) => {
+export const generateAIResponse = async (relevantTransactions, question, summary, res, conversationHistory = []) => {
 
   const transactionContext = relevantTransactions.length > 0 ? 
       relevantTransactions.map(
@@ -49,7 +49,7 @@ ${transactionContext}
 
 // ─── 4. Final prompt builder ──────────────────────────────────────────
 
-const buildPrompt = (question, summary, transactionContext) => {
+const buildPrompt = (question, summary, transactionContext, conversationHistory = []) => {
   const greeting = isGreeting(question);
 
   const systemRole = `
@@ -79,9 +79,17 @@ Instructions:
 - If the user asks for advice, base it strictly on their actual spending patterns.
 `.trim();
 
+  const historyBlock =
+    conversationHistory.length > 0
+      ? conversationHistory
+          .map((m) => `${m.role === "user" ? "User" : "FinBot"}: ${m.content}`)
+          .join("\n")
+      : "";
+
   return `
 ${systemRole}
 
+${historyBlock ? "Conversation so far:\n" + historyBlock + "\n" : ""}
 ${financialContext ? financialContext + "\n" : ""}
 ${instructions}
 
@@ -89,12 +97,17 @@ User: ${question}
 FinBot:`.trim();
 };
 
-  const prompt = buildPrompt(question, summary, transactionContext);
+  const prompt = buildPrompt(question, summary, transactionContext, conversationHistory);
 
   const response = await axios.post(`${process.env.OLLAMA_URL}/api/generate`, {
     model: "mistral",
     prompt,
     stream: true,
+    options: {
+      num_predict: 400,   // cap output tokens → faster first token + shorter responses
+      temperature: 0.3,   // lower randomness → faster sampling decisions
+      num_ctx: 2048,      // keep context window tight
+    },
   }, {
     responseType: "stream",
   });

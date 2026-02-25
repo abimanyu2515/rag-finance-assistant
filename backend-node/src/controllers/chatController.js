@@ -50,6 +50,9 @@ export const chatWithAI = async (req, res) => {
       });
     }
 
+    // Get recent history BEFORE pushing current user message
+    const recentHistory = conversation.messages.slice(-10);
+
     // Save user message
     conversation.messages.push({
       role: "user",
@@ -57,19 +60,17 @@ export const chatWithAI = async (req, res) => {
       timestamp: new Date(),
     });
 
-    // ───────── RAG PIPELINE ─────────
-    const queryEmbedding = await embedText(message);
+    // ───────── RAG PIPELINE (parallelized) ─────────
+    // embedText and DB fetch run concurrently; vector search follows once we have the embedding
+    const [queryEmbedding, allTransactions] = await Promise.all([
+      embedText(message),
+      Transaction.find({ userId: userObjectId }).sort({ timestamp: -1 }).limit(100),
+    ]);
 
-    const relevantTransactions = await retrieveRelevantTransactions(
-      userObjectId,
-      queryEmbedding
-    );
-
-    const allTransactions = await Transaction.find({ userId: userObjectId })
-      .sort({ timestamp: -1 })
-      .limit(200);
-
-    const summary = buildFinancialSummary(allTransactions);
+    const [relevantTransactions, summary] = await Promise.all([
+      retrieveRelevantTransactions(userObjectId, queryEmbedding),
+      Promise.resolve(buildFinancialSummary(allTransactions)),
+    ]);
 
     // Send conversationId early to frontend
     res.write(
@@ -77,7 +78,7 @@ export const chatWithAI = async (req, res) => {
     );
 
     // ───────── STREAM AI RESPONSE ─────────
-    const aiResponse = await generateAIResponse(relevantTransactions, message, summary, res);
+    const aiResponse = await generateAIResponse(relevantTransactions, message, summary, res, recentHistory);
 
     // Save assistant message after streaming completes
     conversation.messages.push({

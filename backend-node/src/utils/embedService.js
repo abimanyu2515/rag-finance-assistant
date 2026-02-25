@@ -6,5 +6,10 @@ export const embedText = async (text) => {
         input: text
     });
 
-    return response.data.embeddings[0];
+    const embeddings = response.data?.embeddings;
+    if (!embeddings || embeddings.length === 0) {
+        throw new Error("Ollama returned no embeddings. Check that nomic-embed-text is pulled and Ollama is running.");
+    }
+
+    return embeddings[0];
 }

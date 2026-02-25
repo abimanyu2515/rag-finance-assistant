@@ -3,7 +3,7 @@ export const buildFinancialSummary = (transactions) => {
   let totalDebit = 0;
   let categoryMap = {};
   let suspiciousCount = 0;
-  let name = "Unkonwn";
+  let name = "Unknown";
   let merchants = new Set();
   
   transactions.forEach(tx => {
