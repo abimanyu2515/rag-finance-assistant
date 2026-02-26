@@ -8,69 +8,95 @@ Transactions are embedded and stored in a **Qdrant vector database**, semantical
 
 ## 🏗️ Architecture Diagram
 
-```
-┌──────────────────────────────────────────────────────────────────────┐
-│                          USER BROWSER                                │
-│                                                                      │
-│  ┌────────────────────────────────────────────────────────────────┐  │
-│  │               Frontend (Next.js 16 + React 19)                 │  │
-│  │                                                                │  │
-│  │   /dashboard        → KPI Cards, Charts (Recharts)            │  │
-│  │   /transactions     → Full Transaction Table                   │  │
-│  │   /ai-assistant     → RAG Chatbot (SSE Streaming)             │  │
-│  │   /fraud-detection  → Fraud Detection (stub)                  │  │
-│  │                                                                │  │
-│  │   Auth: NextAuth v4 (JWT)    Styling: Tailwind + shadcn/ui    │  │
-│  └──────────────────────────────┬─────────────────────────────────┘  │
-└─────────────────────────────────┼────────────────────────────────────┘
-                                  │  HTTP / SSE
-                                  ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                     Backend (Node.js + Express 5)                       │
-│                                                                         │
-│   POST /api/auth/register          → Register user                     │
-│   POST /api/auth/login             → Login, returns JWT                │
-│   POST /api/chat                   → AI chat (RAG pipeline + SSE)      │
-│   GET  /api/conversations          → List conversations                │
-│   GET  /api/conversations/:id      → Get conversation                  │
-│   POST /api/conversations          → Create conversation               │
-│   DELETE /api/conversations/:id    → Delete conversation               │
-│   GET  /api/transactions           → List transactions                 │
-│                                                                         │
-│   ┌─────────────────────────────────────────────────────────────┐      │
-│   │                    RAG Pipeline                              │      │
-│   │                                                              │      │
-│   │   User Message                                               │      │
-│   │        │                                                     │      │
-│   │        ▼                                                     │      │
-│   │   Intent Detection ──► Temporal? ──► MongoDB (date-sorted)   │      │
-│   │        │                                                     │      │
-│   │        ▼ (Semantic)                                          │      │
-│   │   embedText() ──► 768-dim vector (nomic-embed-text)          │      │
-│   │        │                                                     │      │
-│   │        ▼                                                     │      │
-│   │   Qdrant Search ──► Top-8 relevant transactions              │      │
-│   │        │                                                     │      │
-│   │        ▼                                                     │      │
-│   │   Build Financial Summary + Prompt                           │      │
-│   │        │                                                     │      │
-│   │        ▼                                                     │      │
-│   │   Ollama LLM (streaming) ──► SSE tokens to frontend          │      │
-│   └─────────────────────────────────────────────────────────────┘      │
-└────────────┬──────────────────┬──────────────────┬──────────────────────┘
-             │                  │                  │
-             ▼                  ▼                  ▼
-      ┌────────────┐    ┌────────────┐     ┌────────────────┐
-      │  MongoDB    │    │   Qdrant   │     │    Ollama      │
-      │             │    │            │     │                │
-      │ • Users     │    │ • 768-dim  │     │ • LLM:        │
-      │ • Txns      │    │   vectors  │     │   qwen2.5:7b  │
-      │ • Convos    │    │ • Cosine   │     │ • Embeddings: │
-      │             │    │   search   │     │   nomic-embed  │
-      └────────────┘    └────────────┘     └────────────────┘
-```
+```mermaid
+graph TB
+    subgraph Client["CLIENT LAYER"]
+        Browser["Web Browser"]
+    end
 
+    subgraph Frontend["FRONTEND<br/>"]
+
+        Auth["Authentication"]
+        Dashboard["Dashboard"]
+        Transactions["Transactions"]
+        Assistant["AI Assistant"]
+    end
+
+    subgraph Backend["BACKEND<br/>"]
+        APIGateway["API Gateway"]
+        
+        subgraph Controllers["Controllers"]
+            AuthCtrl["Auth Controller"]
+            ChatCtrl["Chat Controller"]
+            ConvCtrl["Conv Controller"]
+            TxnCtrl["Txn Controller"]
+        end
+
+        subgraph RAG["RAG Pipeline"]
+            IntentDetect["Intent Detection"]
+            Embedding["Embedding Service"]
+            VectorSearch["Vector Search"]
+            Summary["Financial Summary"]
+            Prompt["Prompt Builder"]
+            LLMStream["LLM Streaming"]
+        end
+
+        Middleware["JWT Middleware"]
+    end
+
+    subgraph Databases["DATA LAYER"]
+        MongoDB[("MongoDB<br/>Users<br/>Transactions<br/>Conversations")]
+        Qdrant[("Qdrant<br/>Vector Store<br/>768-dim")]
+        Ollama[("Ollama<br/>qwen2.5:7b<br/>nomic-embed")]
+    end
+
+    Browser -->|HTTP/SSE| Frontend
+    
+    Auth --> APIGateway
+    Dashboard --> APIGateway
+    Transactions --> APIGateway
+    Assistant --> APIGateway
+
+    APIGateway --> Middleware
+    APIGateway --> AuthCtrl
+    APIGateway --> ChatCtrl
+    APIGateway --> ConvCtrl
+    APIGateway --> TxnCtrl
+
+    ChatCtrl --> IntentDetect
+    IntentDetect --> Embedding
+    Embedding --> VectorSearch
+    VectorSearch --> Summary
+    Summary --> Prompt
+    Prompt --> LLMStream
+    LLMStream --> ChatCtrl
+
+    AuthCtrl --> MongoDB
+    ChatCtrl --> MongoDB
+    ConvCtrl --> MongoDB
+    TxnCtrl --> MongoDB
+
+    Embedding --> Ollama
+    LLMStream --> Ollama
+    VectorSearch --> Qdrant
+
+    classDef client fill:#3498db,stroke:#2980b9,color:#fff,stroke-width:2px
+    classDef frontend fill:#e74c3c,stroke:#c0392b,color:#fff,stroke-width:2px
+    classDef backend fill:#27ae60,stroke:#229954,color:#fff,stroke-width:2px
+    classDef controllers fill:#16a085,stroke:#117a65,color:#fff,stroke-width:2px
+    classDef rag fill:#f39c12,stroke:#d68910,color:#fff,stroke-width:2px
+    classDef db fill:#2c3e50,stroke:#1a252f,color:#fff,stroke-width:2px
+
+    class Client client
+    class Frontend frontend
+    class Backend backend
+    class Controllers controllers
+    class RAG rag
+    class Databases db
+    class MongoDB,Qdrant,Ollama db
+```
 ---
+
 
 ## 📁 Folder Structure
 
@@ -181,7 +207,7 @@ rag-finance-assistant/
 
 | Service | Purpose | Default URL |
 |---|---|---|
-| **MongoDB** | Primary database | `mongodb://localhost:27017` |
+| **MongoDB** | Primary database | `Your_MongoDB_Atlas_URL` |
 | **Qdrant** | Vector database | `http://localhost:6333` |
 | **Ollama** | Local LLM + embeddings | `http://localhost:11434` |
 
@@ -242,7 +268,7 @@ ollama list
 PORT=5000
 
 # MongoDB connection string
-MONGODB_URI="Your_MONGODB_ATLAS_URI"
+MONGODB_URL="Your_MONGODB_ATLAS_URI"
 
 # JWT secret key (use a strong random string)
 JWT_SECRET=your_jwt_secret_key_here
@@ -360,7 +386,6 @@ Navigate to **http://localhost:3000** in your browser.
 | **Start frontend (dev)** | `npm run dev` | `frontend/` |
 | **Build frontend** | `npm run build` | `frontend/` |
 | **Start frontend (prod)** | `npm run start` | `frontend/` |
-<!-- | **Start MongoDB (Docker)** | `docker start mongodb` | anywhere | -->
 | **Start Qdrant (Docker)** | `docker start qdrant` | anywhere |
 | **Start Ollama** | `ollama serve` | anywhere |
 | **Pull LLM model** | `ollama pull qwen2.5:7b` | anywhere |
@@ -396,8 +421,8 @@ ollama serve
 
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
-| `POST` | `/api/auth/sign-up` | Register a new user |
-| `POST` | `/api/auth/sign-in` | Login, returns JWT token |
+| `POST` | `/api/auth/sign-up` | Register a new user | Creates a New User in MongoDB
+| `POST` | `/api/auth/sign-in` | Login, returns JWT token | Sign in the User with JWT
 | `POST` | `/api/chat` | ✅ JWT | Send message to AI (SSE streaming response) |
 | `GET` | `/api/conversations?userId=` | ✅ JWT | Get all conversations for a user |
 | `GET` | `/api/conversations/:id` | ✅ JWT | Get a single conversation |
