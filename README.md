@@ -78,14 +78,15 @@ graph TB
         Browser["Web Browser"]
     end
 
-    subgraph Frontend["FRONTEND<br/>Next.js 16 + React 19"]
+    subgraph Frontend["FRONTEND<br/>"]
+
         Auth["Authentication"]
         Dashboard["Dashboard"]
         Transactions["Transactions"]
         Assistant["AI Assistant"]
     end
 
-    subgraph Backend["BACKEND<br/>Node.js + Express 5"]
+    subgraph Backend["BACKEND<br/>"]
         APIGateway["API Gateway"]
         
         subgraph Controllers["Controllers"]
