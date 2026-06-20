@@ -45,7 +45,7 @@ export const retrieveRelevantTransactions = async (
     name: row.name,
     type: row.type,
     isSuspicious: row.is_suspicious,
-    timestamp: row.timestamp,
+    created_at: row.timestamp,
     relevanceScore: row.similarity, // cosine similarity score (0–1)
   }));
 };

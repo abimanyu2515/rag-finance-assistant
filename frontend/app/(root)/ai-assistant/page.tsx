@@ -15,6 +15,7 @@ const Chatbot = () => {
   const USER_ID = (session?.user as { _id?: string; id?: string } | undefined)?._id
     ?? (session?.user as { _id?: string; id?: string } | undefined)?.id;
   const ACCESS_TOKEN = (session as { accessToken?: string } | undefined)?.accessToken;
+  const initial = session?.user?.name
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
@@ -33,7 +34,7 @@ const Chatbot = () => {
         id: `${conversation._id}-${index}`,
         role: message.role,
         content: message.content,
-        timestamp: new Date(message.timestamp)
+        created_at: new Date(message.created_at)
       }));
 
       setMessages(loadedMessages);
@@ -54,7 +55,7 @@ const Chatbot = () => {
         id: aiMessageId,
         role: 'assistant',
         content: '',
-        timestamp: new Date()
+        created_at: new Date()
       },
     ])
     
@@ -163,7 +164,7 @@ const Chatbot = () => {
       id: Date.now().toString(),
       role: 'user',
       content,
-      timestamp: new Date()
+      created_at: new Date()
     }
     setMessages(prev => [...prev, newMessage])
     handleSend(newMessage)
@@ -180,7 +181,7 @@ const Chatbot = () => {
       <div className={`fixed top-20 bottom-0 right-0 flex flex-col bg-[#0f1c33] transition-all duration-300 ${
         isCollapsed ? 'left-20' : 'left-64'
       }`}>
-        <MessageList messages={messages} isLoading={loading} />
+        <MessageList messages={messages} isLoading={loading} initial={initial} />
         <ChatInput onSendMessage={handleSendMessage} disabled={loading} />
       </div>
       

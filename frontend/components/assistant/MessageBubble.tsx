@@ -1,15 +1,14 @@
 import { Message } from '@/types/chat'
 import { Bot, CircleUserRound } from 'lucide-react';
-import React from 'react'
 
-const MessageBubble = ({ message }: { message: Message }) => {
+const MessageBubble = ({ message, initial }: { message: Message; initial?: string }) => {
   const isUser = message.role === 'user';
 
   return (
     <div className={`flex gap-3 ${ isUser ? 'flex-row-reverse' : 'flex-row' }`}>
       <div className={`flex shrink-0 items-center justify-center w-8 h-8 rounded-full ${ isUser ? 'bg-blue-600' : 'bg-purple-600' }`}>
         { isUser ? (
-          <CircleUserRound className='w-7 h-7 text-white' />
+          <span className='rounded-full text-xl text-white px-2.5'>{initial?.charAt(0) || "Profile"}</span>
         ) : (
           <Bot className='w-7 h-7 text-white' />
         ) }
@@ -21,7 +20,7 @@ const MessageBubble = ({ message }: { message: Message }) => {
         </div>
 
         <span className='text-xs text-gray-400 mt-1 px-1'>
-          {new Date(message.timestamp).toLocaleTimeString([], {
+          {new Date(message.created_at).toLocaleTimeString([], {
             hour: '2-digit',
             minute: '2-digit',
           })}

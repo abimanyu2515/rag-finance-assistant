@@ -5,7 +5,7 @@ import { Message } from '@/types/chat'
 import MessageBubble from './MessageBubble'
 import TypingIndicator from './TypingIndicator'
 
-const MessageList = ({ messages, isLoading = false }: MessageListProps) => {
+const MessageList = ({ messages, isLoading = false, initial }: MessageListProps & { initial?: string }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const scrollToBottom = () => {
@@ -28,7 +28,7 @@ const MessageList = ({ messages, isLoading = false }: MessageListProps) => {
       ) : (
         <>
           {messages.map((message) => (
-            <MessageBubble key={message.id} message={message} />
+            <MessageBubble key={message.id} message={message} initial={initial} />
           ))}
           {isLoading && <TypingIndicator />}
         </>

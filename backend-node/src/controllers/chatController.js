@@ -1,6 +1,9 @@
 import { supabase } from "../config/supabase.js";
-import { TABLE_NAME as ConversationTable } from "../models/Conversations.js";
-import { TABLE_NAME as TransactionTable } from "../models/Transactions.js";
+import {
+  findConversationById,
+  createConversation,
+  addMessage,
+} from "../models/Conversations.js";
 import { embedText } from "../utils/embedService.js";
 import { generateAIResponse } from "../utils/aiService.js";
 import { retrieveRelevantTransactions } from "../utils/retrieveContext.js";
@@ -26,45 +29,22 @@ export const chatWithAI = async (req, res) => {
 
     // ───────── LOAD OR CREATE CONVERSATION ─────────
     if (conversationId) {
-      const { data: convData, error: convError } = await supabase
-        .from(ConversationTable)
-        .select('*')
-        .eq('id', conversationId)
-        .eq('user_id', userId)
-        .single();
-
-      if (convError || !convData) {
+      conversation = await findConversationById(conversationId, userId);
+      if (!conversation) {
         res.write(`data: ${JSON.stringify({ error: "Conversation not found" })}\n\n`);
         return res.end();
       }
-      conversation = convData;
     } else {
-      const { data: newConv, error: createError } = await supabase
-        .from(ConversationTable)
-        .insert({
-          user_id: userId,
-          title: message.substring(0, 25),
-          messages: [],
-        })
-        .select()
-        .single();
-
-      if (createError) throw createError;
-      conversation = newConv;
+      conversation = await createConversation(userId, message.substring(0, 25));
     }
 
-    // Get recent history BEFORE pushing current user message
-    const recentHistory = (conversation.messages || []).slice(-4);
+    // Recent history BEFORE the current message is persisted —
+    // conversation.messages already comes back oldest-first from the model.
+    const recentHistory = conversation.messages.slice(-4);
 
-    // Prepare updated messages
-    const updatedMessages = [
-      ...(conversation.messages || []),
-      {
-        role: "user",
-        content: message,
-        timestamp: new Date().toISOString(),
-      }
-    ];
+    // Persist the user's message now (separate row in `messages`, not an
+    // array mutation — the DB trigger bumps conversations.updated_at).
+    await addMessage(conversation._id, { role: "user", content: message });
 
     // ───────── INTENT DETECTION ─────────
     const temporalIntent = detectTemporalIntent(message);
@@ -73,21 +53,21 @@ export const chatWithAI = async (req, res) => {
     let summary;
 
     if (temporalIntent.isTemporal) {
-      // Temporal query — bypass Qdrant, use date-sorted Supabase results
+      // Temporal query — bypass vector search, use date-sorted Supabase results
       const order = temporalIntent.order === "asc" ? false : true; // false for asc (default), true for desc
 
       const [temporalTxnsResult, allTransactionsResult] = await Promise.all([
         supabase
-          .from(TransactionTable)
-          .select('*')
-          .eq('user_id', userId)
-          .order('timestamp', { ascending: !order })
+          .from("transactions")
+          .select("*")
+          .eq("user_id", userId)
+          .order("timestamp", { ascending: !order })
           .limit(temporalIntent.count),
         supabase
-          .from(TransactionTable)
-          .select('*')
-          .eq('user_id', userId)
-          .order('timestamp', { ascending: false })
+          .from("transactions")
+          .select("*")
+          .eq("user_id", userId)
+          .order("timestamp", { ascending: false })
           .limit(100),
       ]);
 
@@ -104,10 +84,10 @@ export const chatWithAI = async (req, res) => {
       const [queryEmbedding, allTransactionsResult] = await Promise.all([
         embedText(message),
         supabase
-          .from(TransactionTable)
-          .select('*')
-          .eq('user_id', userId)
-          .order('timestamp', { ascending: false })
+          .from("transactions")
+          .select("*")
+          .eq("user_id", userId)
+          .order("timestamp", { ascending: false })
           .limit(100),
       ]);
 
@@ -120,37 +100,26 @@ export const chatWithAI = async (req, res) => {
     }
 
     // Send conversationId early to frontend
-    res.write(
-      `data: ${JSON.stringify({ conversationId: conversation.id })}\n\n`
-    );
+    res.write(`data: ${JSON.stringify({ conversationId: conversation._id })}\n\n`);
 
     // ───────── STREAM AI RESPONSE ─────────
-    const aiResponse = await generateAIResponse(relevantTransactions, message, summary, res, recentHistory);
+    const aiResponse = await generateAIResponse(
+      relevantTransactions,
+      message,
+      summary,
+      res,
+      recentHistory
+    );
 
-    // Save assistant message after streaming completes
-    const finalMessages = [
-      ...updatedMessages,
-      {
-        role: "assistant",
-        content: aiResponse,
-        timestamp: new Date().toISOString(),
-      }
-    ];
-
-    const { error: updateError } = await supabase
-      .from(ConversationTable)
-      .update({ messages: finalMessages })
-      .eq('id', conversation.id);
-      
-    if (updateError) throw updateError;
+    // Save assistant message after streaming completes — another row,
+    // not a re-write of the whole conversation.
+    await addMessage(conversation._id, { role: "assistant", content: aiResponse });
 
     res.write(`data: ${JSON.stringify({ saved: true })}\n\n`);
   } catch (error) {
     console.error("Error in chatWithAI:", error);
     if (!res.writableEnded) {
-      res.write(
-        `data: ${JSON.stringify({ error: "Failed to process chat message" })}\n\n`
-      );
+      res.write(`data: ${JSON.stringify({ error: "Failed to process chat message" })}\n\n`);
     }
   } finally {
     if (!res.writableEnded) {

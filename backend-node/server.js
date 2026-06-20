@@ -7,11 +7,9 @@ import authRoutes from './src/routes/authRoutes.js';
 import chatRoutes from './src/routes/chatRoutes.js';
 import conversationRoutes from './src/routes/conversationRoutes.js'
 import transactionRoutes from './src/routes/transactionRoutes.js';
-import { setupQdrant } from './src/config/qdrant.js';
 
 dotenv.config();
 connectDB();
-setupQdrant();
 
 const app = express();
 app.use(cors());

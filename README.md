@@ -1,11 +1,14 @@
 # 💰 RAG Finance Assistant
 
 - A full-stack personal finance web application powered by a **Retrieval-Augmented Generation (RAG)** AI chatbot built with modern web technologies. The platform enables users to manage and analyze their personal financial data through an intuitive dashboard, detailed transaction views, and an intelligent AI assistant.
-- Users can sign up, securely authenticate via **JWT-based authentication**, and interact with their financial records in real time. Every transaction stored in **MongoDB Atlas** is embedded into a **768-dimensional vector** using the **nomic-embed-text** model running locally on **Ollama**. These vectors are indexed and stored in a **Qdrant vector database**, enabling high-performance semantic similarity search across all user transactions.
-- When a user asks the AI assistant a question, the system detects intent — distinguishing between temporal queries (e.g., "last 5 transactions") and semantic queries (e.g., "spending at Amazon"). For semantic queries, the user's question is embedded and matched against stored vectors using cosine similarity, retrieving the most relevant transactions as context.
+- Users can sign up, securely authenticate via **JWT-based authentication**, and interact with their financial records in real time. All application data — users, transactions, conversations, messages — lives in a single **Supabase (Postgres)** database. Every transaction is embedded into a **768-dimensional vector** using the **nomic-embed-text** model running locally on **Ollama**, and that vector is stored directly on the transaction row using the **pgvector** extension — no separate vector database required.
+- When a user asks the AI assistant a question, the system detects intent — distinguishing between temporal queries (e.g., "last 5 transactions") and semantic queries (e.g., "spending at Amazon"). For semantic queries, the user's question is embedded and matched against stored vectors via a Postgres RPC function (`match_transactions`) using cosine similarity, retrieving the most relevant transactions as context.
 - A comprehensive financial summary (total credits, debits, balance, category breakdowns) is dynamically generated and combined with retrieved context to build a rich prompt for the LLM.
 - The prompt is sent to a locally hosted **qwen2.5:7b** language model via Ollama, which streams the response token-by-token back to the frontend using **Server-Sent Events (SSE)**.
 - The frontend, built with **Next.js**, **React**, **TypeScript**, and **Tailwind CSS**, renders the AI responses in real time, delivering a seamless and responsive conversational experience.
+
+> **Status note:** Authentication, the Transactions page, conversation history, and the AI Assistant are wired to the live Supabase backend. The Dashboard still renders from local mock/constant data and is not yet connected to the live API.
+
 
 ---
 
@@ -32,7 +35,7 @@ graph TB
             AuthCtrl["Auth Controller"]
             ChatCtrl["Chat Controller"]
             ConvCtrl["Conv Controller"]
-            TxnCtrl["Txn Controller"]
+            TxnRoute["Txn Route Handler"]
         end
 
         subgraph RAG["RAG Pipeline"]
@@ -48,8 +51,7 @@ graph TB
     end
 
     subgraph Databases["DATA LAYER"]
-        MongoDB[("MongoDB<br/>Users<br/>Transactions<br/>Conversations")]
-        Qdrant[("Qdrant<br/>Vector Store<br/>768-dim")]
+        Supabase[("Supabase (Postgres)<br/>Users · Transactions<br/>Conversations · Messages<br/>+ pgvector embeddings")]
         Ollama[("Ollama<br/>qwen2.5:7b<br/>nomic-embed")]
     end
 
@@ -64,7 +66,7 @@ graph TB
     APIGateway --> AuthCtrl
     APIGateway --> ChatCtrl
     APIGateway --> ConvCtrl
-    APIGateway --> TxnCtrl
+    APIGateway --> TxnRoute
 
     ChatCtrl --> IntentDetect
     IntentDetect --> Embedding
@@ -74,14 +76,14 @@ graph TB
     Prompt --> LLMStream
     LLMStream --> ChatCtrl
 
-    AuthCtrl --> MongoDB
-    ChatCtrl --> MongoDB
-    ConvCtrl --> MongoDB
-    TxnCtrl --> MongoDB
+    AuthCtrl --> Supabase
+    ChatCtrl --> Supabase
+    ConvCtrl --> Supabase
+    TxnRoute --> Supabase
 
     Embedding --> Ollama
     LLMStream --> Ollama
-    VectorSearch --> Qdrant
+    VectorSearch --> Supabase
 
     classDef client fill:#3498db,stroke:#2980b9,color:#fff,stroke-width:2px
     classDef frontend fill:#e74c3c,stroke:#c0392b,color:#fff,stroke-width:2px
@@ -96,7 +98,7 @@ graph TB
     class Controllers controllers
     class RAG rag
     class Databases db
-    class MongoDB,Qdrant,Ollama db
+    class Supabase,Ollama db
 ```
 ---
 
@@ -112,32 +114,31 @@ rag-finance-assistant/
 │   ├── server.js                        # Entry point — Express app, route registration
 │   └── src/
 │       ├── config/
-│       │   ├── db.js                    # MongoDB connection (Mongoose)
-│       │   └── qdrant.js               # Qdrant client + collection setup
+│       │   └── supabase.js              # Supabase client (service role key)
 │       ├── controllers/
 │       │   ├── authController.js        # Register / Login logic
 │       │   ├── chatController.js        # AI chat handler (RAG pipeline)
-│       │   └── conversationController.js # CRUD for conversations
+│       │   ├── conversationController.js # CRUD for conversations
 │       ├── middleware/
 │       │   └── authMiddleware.js        # JWT verification middleware
 │       ├── models/
-│       │   ├── User.js                  # User schema (name, email, password)
-│       │   ├── Transactions.js          # Transaction schema
-│       │   └── Conversations.js         # Conversation + messages schema
+│       │   ├── User.js                  # User data access (Supabase)
+│       │   ├── Transactions.js          # Transaction data access (Supabase)
+│       │   └── Conversations.js         # Conversation + message data access (Supabase)
 │       ├── routes/
 │       │   ├── authRoutes.js            # /api/auth/*
 │       │   ├── chatRoutes.js            # /api/chat
 │       │   ├── conversationRoutes.js    # /api/conversations/*
 │       │   └── transactionRoutes.js     # /api/transactions/*
 │       ├── scripts/
-│       │   └── ingest.js               # Batch embed & upsert transactions into Qdrant
+│       │   └── ingest.js               # Batch embed transactions, store vectors in Postgres
 │       └── utils/
 │           ├── aiService.js             # Prompt builder + Ollama LLM streaming
 │           ├── embedService.js          # Text → 768-dim vector (nomic-embed-text)
 │           ├── financialSummary.js      # Aggregate transactions → financial summary
-│           ├── ingestTransactions.js    # Embed & upsert a single transaction to Qdrant
+│           ├── ingestTransactions.js    # Embed & store a single transaction's vector
 │           ├── intentDetector.js        # Temporal query detection (last/first N txns)
-│           └── retrieveContext.js       # Semantic search in Qdrant (filtered by userId)
+│           └── retrieveContext.js       # pgvector similarity search (match_transactions RPC)
 │
 ├── frontend/
 │   ├── .env                             # Frontend environment variables
@@ -150,9 +151,9 @@ rag-finance-assistant/
 │   │   ├── (auth)/                      # Login / Register pages
 │   │   └── (root)/
 │   │       ├── layout.tsx               # Root layout with Sidebar
-│   │       ├── dashboard/               # Dashboard page (KPIs + charts)
-│   │       ├── transactions/            # Transaction list page
-│   │       ├── ai-assistant/            # AI Chatbot page
+│   │       ├── dashboard/               # Dashboard page (KPIs + charts) — mock data
+│   │       ├── transactions/            # Transaction list page — live API
+│   │       ├── ai-assistant/            # AI Chatbot page — live API
 │   │       ├── fraud-detection/         # Fraud Detection page (stub)
 │   │       └── app-settings/            # Settings page (stub)
 │   ├── components/
@@ -171,6 +172,9 @@ rag-finance-assistant/
 │   │   └── chat.ts                      # TypeScript types for messages & conversations
 │   └── public/                          # Static assets
 │
+├── supabase/
+│   └── schema.sql                       # Postgres schema: tables, pgvector, RLS, match_transactions RPC
+│
 ├── PROJECT_SUMMARY.md                   # Detailed project documentation
 └── README.md                            # This file
 ```
@@ -185,8 +189,7 @@ rag-finance-assistant/
 |---|---|---|
 | **Node.js** | Runtime | v18+ |
 | **Express** | HTTP framework | 5.x |
-| **Mongoose** | MongoDB ODM | 9.x |
-| **@qdrant/js-client-rest** | Qdrant vector DB client | 1.x |
+| **@supabase/supabase-js** | Supabase client (Postgres + pgvector) | 2.x |
 | **Axios** | HTTP client (→ Ollama API) | 1.x |
 | **jsonwebtoken** | JWT auth tokens | 9.x |
 | **bcryptjs** | Password hashing | 3.x |
@@ -210,8 +213,7 @@ rag-finance-assistant/
 
 | Service | Purpose | Default URL |
 |---|---|---|
-| **MongoDB** | Primary database | `Your_MongoDB_Atlas_URL` |
-| **Qdrant** | Vector database | `http://localhost:6333` |
+| **Supabase** | Postgres database + pgvector (users, transactions, conversations, messages, embeddings) | `https://<your-project>.supabase.co` |
 | **Ollama** | Local LLM + embeddings | `http://localhost:11434` |
 
 ---
@@ -227,30 +229,25 @@ node --version    # verify: v18.x or higher
 npm --version     # verify: 9.x or higher
 ```
 
-### 2. MongoDB Atlas (Cloud Database)
+### 2. Supabase Project (Postgres + pgvector)
 ```bash
-# 1. Create a free account at https://www.mongodb.com/cloud/atlas
-# 2. Create a new cluster (free M0 tier is sufficient)
-# 3. Under "Database Access", create a database user with read/write permissions
-# 4. Under "Network Access", add your IP address (or allow access from anywhere: 0.0.0.0/0)
-# 5. Click "Connect" → "Drivers" → copy the connection string
-
-# Your connection string will look like:
-# mongodb+srv://<username>:<password>@<cluster>.mongodb.net/<dbname>?retryWrites=true&w=majority
-
-# Paste it into backend-node/.env as MONGODB_URL
+# 1. Create a free account at https://supabase.com
+# 2. Create a new project (note the database password you set)
+# 3. In the SQL Editor, run supabase/schema.sql from this repo —
+#    it enables the pgcrypto and vector extensions, creates the
+#    users / transactions / conversations / messages tables, the
+#    HNSW index, the match_transactions RPC function, and RLS policies
+# 4. Go to Project Settings → API and copy:
+#      - Project URL                 → SUPABASE_URL
+#      - service_role secret key     → SUPABASE_SERVICE_ROLE_KEY
+#
+# IMPORTANT: use the service_role key, NOT the anon/public key.
+# This backend authenticates users with its own JWT (not Supabase Auth),
+# so Postgres's auth.uid() is always NULL for these requests — using the
+# anon key means every RLS-protected table silently returns zero rows.
 ```
 
-### 3. Qdrant (Vector Database)
-```bash
-# Using Docker (recommended)
-docker run -d --name qdrant -p 6333:6333 -p 6334:6334 qdrant/qdrant:latest
-
-# Verify
-curl http://localhost:6333/dashboard
-```
-
-### 4. Ollama (Local LLM)
+### 3. Ollama (Local LLM)
 ```bash
 # Download from https://ollama.com/download
 
@@ -272,8 +269,9 @@ ollama list
 # Server
 PORT=5000
 
-# MongoDB connection string
-MONGODB_URL="Your_MONGODB_ATLAS_URL"
+# Supabase
+SUPABASE_URL=https://<your-project>.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key_here
 
 # JWT secret key (use a strong random string)
 JWT_SECRET=your_jwt_secret_key_here
@@ -304,20 +302,19 @@ NEXTAUTH_SECRET=your_nextauth_secret_key_here
 
 ```bash
 
-# Terminal 1 — Qdrant
-docker start qdrant
-
-# Terminal 2 — Ollama (with performance tuning)
+# Terminal 1 — Ollama (with performance tuning)
 set OLLAMA_KEEP_ALIVE=-1
 set OLLAMA_NUM_THREADS=8
 set OLLAMA_MAX_LOADED_MODELS=2
 ollama serve
 ```
 
+> Supabase is a hosted cloud service — there's no local container to start. Just make sure `supabase/schema.sql` has already been run once in the SQL Editor (see Prerequisites above).
+
 ### Step 2: Setup & Run Backend
 
 ```bash
-# Terminal 4
+# Terminal 2
 cd backend-node
 
 # Install dependencies
@@ -325,22 +322,22 @@ npm install
 
 # Create .env file (see template above)
 # Then start the server
-node server.js  ||  npm run dev (install Nodemon)
+npm run dev   # nodemon, auto-restarts on changes
+# or: node server.js
 ```
 
 You should see:
 ```
-MongoDB Connected
-Collection exists already.
+Supabase Connected
 Server running
 ```
 
-### Step 3: Ingest Transactions into Qdrant
+### Step 3: Ingest Transactions (Generate Embeddings)
 
-> **Run this once** after adding transactions to MongoDB. This embeds all transactions and upserts them into Qdrant for vector search.
+> **Run this once** after adding transactions to your `transactions` table in Supabase. This embeds each transaction's description and stores the 768-dim vector directly on the row (`transactions.embedding`).
 
 ```bash
-# Terminal 5 (one-time operation)
+# Terminal 3 (one-time operation, re-run after adding new transactions)
 cd backend-node
 node src/scripts/ingest.js
 ```
@@ -354,7 +351,7 @@ Ingestion Complete.
 ### Step 4: Setup & Run Frontend
 
 ```bash
-# Terminal 6
+# Terminal 4
 cd frontend
 
 # Install dependencies
@@ -376,7 +373,8 @@ Navigate to **http://localhost:3000** in your browser.
 
 1. **Sign up** a new account at `/sign-up`
 2. **Sign in** at `/sign-in`
-3. Go to **AI Assistant** and start chatting with your financial data
+3. Go to **Transactions** to confirm your seeded data is showing up
+4. Go to **AI Assistant** and start chatting with your financial data
 
 ---
 
@@ -385,13 +383,13 @@ Navigate to **http://localhost:3000** in your browser.
 | Action | Command | Directory |
 |---|---|---|
 | **Install backend deps** | `npm install` | `backend-node/` |
-| **Start backend** | `node server.js` | `backend-node/` |
+| **Start backend (dev)** | `npm run dev` | `backend-node/` |
+| **Start backend (plain node)** | `node server.js` | `backend-node/` |
 | **Ingest transactions** | `node src/scripts/ingest.js` | `backend-node/` |
 | **Install frontend deps** | `npm install` | `frontend/` |
 | **Start frontend (dev)** | `npm run dev` | `frontend/` |
 | **Build frontend** | `npm run build` | `frontend/` |
 | **Start frontend (prod)** | `npm run start` | `frontend/` |
-| **Start Qdrant (Docker)** | `docker start qdrant` | anywhere |
 | **Start Ollama** | `ollama serve` | anywhere |
 | **Pull LLM model** | `ollama pull qwen2.5:7b` | anywhere |
 | **Pull embedding model** | `ollama pull nomic-embed-text` | anywhere |
@@ -426,14 +424,16 @@ ollama serve
 
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
-| `POST` | `/api/auth/sign-up` | Register a new user | Creates a New User in MongoDB
-| `POST` | `/api/auth/sign-in` | Login, returns JWT token | Sign in the User with JWT
+| `POST` | `/api/auth/signup` | — | Register a new user |
+| `POST` | `/api/auth/signin` | — | Login, returns a JWT token |
 | `POST` | `/api/chat` | ✅ JWT | Send message to AI (SSE streaming response) |
-| `GET` | `/api/conversations?userId=` | ✅ JWT | Get all conversations for a user |
-| `GET` | `/api/conversations/:id` | ✅ JWT | Get a single conversation |
+| `GET` | `/api/conversations` | ✅ JWT | Get all conversations for the authenticated user |
+| `GET` | `/api/conversations/:id` | ✅ JWT | Get a single conversation with its messages |
 | `POST` | `/api/conversations` | ✅ JWT | Create a new conversation |
+| `POST` | `/api/conversations/:id/messages` | ✅ JWT | Append a message to a conversation |
+| `PATCH` | `/api/conversations/:id/title` | ✅ JWT | Rename a conversation |
 | `DELETE` | `/api/conversations/:id` | ✅ JWT | Delete a conversation |
-| `GET` | `/api/transactions` | ✅ JWT | Get user transactions |
+| `GET` | `/api/transactions` | ✅ JWT | Get the authenticated user's transactions |
 
 ---
 
@@ -443,7 +443,7 @@ ollama serve
 User: "give me my last 5 transactions"
   │
   ├── Intent Detection → Temporal query detected (last 5)
-  │     └── MongoDB: find().sort({ timestamp: -1 }).limit(5)
+  │     └── Supabase: transactions.select().order('timestamp', desc).limit(5)
   │
   ├── Financial Summary built from last 100 transactions
   │     └── { totalCredit, totalDebit, balance, categoryMap, merchants }
@@ -457,7 +457,8 @@ User: "how much did I spend at Amazon?"
   │
   ├── Intent Detection → Not temporal, use semantic search
   │     └── embedText() → 768-dim vector
-  │     └── Qdrant: cosine similarity search → top 8 relevant transactions
+  │     └── Supabase RPC match_transactions(): pgvector cosine similarity
+  │         search (scoped to user_id, min score 0.45) → top 8 transactions
   │
   ├── Financial Summary built from last 100 transactions
   │
@@ -472,13 +473,16 @@ User: "how much did I spend at Amazon?"
 
 ### Security
 - **JWT Authentication** — All protected routes require a valid JWT token. Tokens are signed with a secret key and verified on each request.
-- **Password Hashing** — User passwords are hashed with bcrypt before being stored in MongoDB Atlas.
-- **Environment Variables** — Sensitive credentials (database URI, JWT secret, NextAuth secret) are stored in `.env` files and should **never** be committed to version control.
+- **Password Hashing** — User passwords are hashed with bcrypt before being stored in Supabase.
+- **Service Role Key (Backend Only)** — The backend uses Supabase's `service_role` key, which bypasses Row Level Security. Authorization is enforced entirely by the Express JWT middleware, not by Supabase Auth/RLS. This key must **never** be exposed to the frontend.
+- **Row Level Security (Scaffolded)** — RLS policies exist on `transactions`, `conversations`, and `messages` for future adoption of Supabase Auth, but are currently bypassed by the service role key.
+- **Environment Variables** — Sensitive credentials (Supabase URL/service role key, JWT secret, NextAuth secret) are stored in `.env` files and should **never** be committed to version control.
 - **CORS** — Cross-origin requests are restricted via the `cors` middleware configuration.
 
 ### Limitations
 - **Local LLM Only** — The AI assistant relies on Ollama running locally; there is no cloud LLM fallback. Response quality and speed depend on your hardware.
 - **Single-User Focused** — While multi-user auth is supported, there is no role-based access control or admin panel.
+- **Dashboard Not Yet Live** — The Dashboard page currently renders mock/constant data and is not wired to the live API (Transactions and AI Assistant are).
 
 ---
 

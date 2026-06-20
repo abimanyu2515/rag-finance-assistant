@@ -22,6 +22,8 @@ const Transactions = () => {
       .finally(() => setLoading(false))
   }, [session])
 
+  console.log("Transactions:", transactions)
+
   return (
     <>
       <div className={`fixed top-0 right-0 h-20 flex items-center bg-[#11213d] border-b z-30 transition-all duration-300 ${

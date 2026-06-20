@@ -2,7 +2,7 @@ export interface Message {
     id: string;
     role: 'user' | 'assistant';
     content: string;
-    timestamp: Date;
+    created_at: Date;
 }
 
 export interface Conversation {

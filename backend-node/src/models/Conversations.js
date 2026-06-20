@@ -24,7 +24,7 @@ const messageFromRow = (row) => ({
   _id: row.id,
   role: row.role,
   content: row.content,
-  timestamp: row.timestamp,
+  created_at: row.timestamp,
 });
 
 export const findConversationById = async (conversationId, userId) => {
@@ -42,7 +42,7 @@ export const findConversationById = async (conversationId, userId) => {
     .from("messages")
     .select("*")
     .eq("conversation_id", conversationId)
-    .order("timestamp", { ascending: true });
+    .order("created_at", { ascending: true });
 
   if (msgError) throw msgError;
   return conversationFromRow(conv, messages);
@@ -76,9 +76,9 @@ export const listConversationsForUser = async (userId, limit = 15) => {
   const ids = convs.map((c) => c.id);
   const { data: lastMessages, error: msgError } = await supabase
     .from("messages")
-    .select("conversation_id, content, timestamp")
+    .select("conversation_id, content, created_at")
     .in("conversation_id", ids)
-    .order("timestamp", { ascending: false });
+    .order("created_at", { ascending: false });
 
   if (msgError) throw msgError;
 
@@ -97,14 +97,14 @@ export const listConversationsForUser = async (userId, limit = 15) => {
   }));
 };
 
-export const addMessage = async (conversationId, { role, content, timestamp }) => {
+export const addMessage = async (conversationId, { role, content, created_at }) => {
   const { data, error } = await supabase
     .from("messages")
     .insert({
       conversation_id: conversationId,
       role,
       content,
-      timestamp: timestamp || new Date().toISOString(),
+      created_at: created_at || new Date().toISOString(),
     })
     .select()
     .single();
