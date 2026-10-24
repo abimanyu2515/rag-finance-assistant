@@ -94,7 +94,7 @@ export const generateAIResponse = async (relevantTransactions, question, summary
   // ─── 5. Call Groq API ────────────────────────────────────────────────
 
   const stream = await groq.chat.completions.create({
-    model: "llama-3.1-8b-instant",   // Free, fast (~200 tok/s). Alternatives: "llama-3.3-70b-versatile" (smarter, still free)
+    model: "openai/gpt-oss-120b",   // Free, fast (~200 tok/s). Alternatives: "llama-3.3-70b-versatile" (smarter, still free)
     messages,
     stream: true,
     max_tokens: 400,
