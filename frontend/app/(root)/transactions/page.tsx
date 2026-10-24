@@ -1,73 +1,107 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useSession } from 'next-auth/react'
-import CustomHeader from '@/components/CustomHeader'
-import { useSidebar } from '@/contexts/SidebarContext'
+import { useMemo, useState } from 'react'
+import { Search } from 'lucide-react'
+import PageShell from '@/components/PageShell'
+import DashboardCard from '@/components/dashboard/DashboardCard'
+import RangeSelect from '@/components/dashboard/RangeSelect'
+import TransactionsTable from '@/components/dashboard/TransactionsTable'
+import { type RangeKey, applyRange, fmt } from '@/lib/dashboard'
+import { useTransactions } from '@/lib/useTransactions'
+
+type Filter = 'all' | 'credit' | 'debit' | 'suspicious'
+
+const FILTERS: { key: Filter; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'credit', label: 'Income' },
+  { key: 'debit', label: 'Spending' },
+  { key: 'suspicious', label: 'Suspicious' },
+]
 
 const Transactions = () => {
-  const { isCollapsed } = useSidebar()
-  const { data: session } = useSession()
-  const [transactions, setTransactions] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
+  const { transactions, loading } = useTransactions()
+  const [range, setRange] = useState<RangeKey>('all')
+  const [filter, setFilter] = useState<Filter>('all')
+  const [query, setQuery] = useState('')
 
-  useEffect(() => {
-    if (!(session as any)?.accessToken) return
-    fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/transactions`, {
-      headers: { Authorization: `Bearer ${(session as any).accessToken}` },
-    })
-      .then((r) => r.json())
-      .then((data) => Array.isArray(data) ? setTransactions(data) : null)
-      .catch(console.error)
-      .finally(() => setLoading(false))
-  }, [session])
+  const { filtered: inRange, rangeLabel } = useMemo(() => applyRange(transactions, range), [transactions, range])
 
-  console.log("Transactions:", transactions)
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return inRange
+      .filter(t =>
+        filter === 'all' ? true :
+        filter === 'suspicious' ? t.isSuspicious :
+        t.type === filter
+      )
+      .filter(t => !q || `${t.merchant ?? ''} ${t.category ?? ''}`.toLowerCase().includes(q))
+  }, [inRange, filter, query])
+
+  const income = inRange.filter(t => t.type === 'credit').reduce((s, t) => s + t.amount, 0)
+  const spending = inRange.filter(t => t.type === 'debit').reduce((s, t) => s + t.amount, 0)
+  const flagged = inRange.filter(t => t.isSuspicious).length
+
+  const summary = [
+    { label: 'Transactions', value: String(inRange.length), tone: '' },
+    { label: 'Income', value: fmt(income), tone: 'text-pos' },
+    { label: 'Spending', value: fmt(spending), tone: '' },
+    { label: 'Suspicious', value: String(flagged), tone: flagged ? 'text-neg' : '' },
+  ]
 
   return (
-    <>
-      <div className={`fixed top-0 right-0 h-20 flex items-center bg-[#11213d] border-b z-30 transition-all duration-300 ${
-        isCollapsed ? 'left-20' : 'left-64'
-      }`}>
-        <CustomHeader title='TRANSACTIONS' />
+    <PageShell title='Transactions'>
+      <div className='flex flex-wrap items-center justify-between gap-4 mb-8'>
+        <p className='text-sm text-ink-muted'>Every transaction on your account, newest first:</p>
+        <RangeSelect value={range} onChange={setRange} label={rangeLabel} />
       </div>
 
-      <div className={`bg-[#01122e] px-5 py-5 mt-15 min-h-screen transition-all duration-300 ${
-        isCollapsed ? 'ml-20' : 'ml-64'
-      }`}>
-        <div className='rounded-lg mt-7'>
-          <h1 className='text-xl font-medium'>All Transactions</h1>
-          {loading ? (
-            <p className='mt-7 text-gray-400'>Loading transactions…</p>
-          ) : (
-            <table className='w-full mt-7 border-collapse'>
-              <thead className='bg-blue-300 text-black'>
-                <tr className='border font-normal border-white'>
-                  <td className='px-3 py-4'>Merchant</td>
-                  <td>Category</td>
-                  <td>Amount</td>
-                  <td>Date</td>
-                  <td>Status</td>
-                </tr>
-              </thead>
-              {transactions.map((tx) => (
-                <tbody key={tx._id}>
-                  <tr className='border'>
-                    <td className='py-5 pl-3'>{tx.merchant || 'Unknown'}</td>
-                    <td>{tx.category || '—'}</td>
-                    <td>₹{Number(tx.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                    <td>{new Date(tx.timestamp).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
-                    <td className={tx.isSuspicious ? 'text-red-400' : 'text-green-400'}>
-                      {tx.isSuspicious ? 'Suspicious' : 'Normal'}
-                    </td>
-                  </tr>
-                </tbody>
-              ))}
-            </table>
-          )}
-        </div>
+      <div className='grid grid-cols-2 xl:grid-cols-4 gap-6 mb-6'>
+        {summary.map(s => (
+          <div key={s.label} className='bg-panel border border-line-soft rounded-2xl px-6 py-5'>
+            <p className='text-xs text-ink-muted font-medium'>{s.label}</p>
+            <p className={`text-2xl mt-2 ${s.tone}`}>{s.value}</p>
+          </div>
+        ))}
       </div>
-    </>
+
+      <DashboardCard title='All Transactions' subtitle={rangeLabel}>
+        <div className='flex flex-wrap items-center justify-between gap-4 mt-6 mb-4'>
+          <div className='flex gap-2'>
+            {FILTERS.map(f => (
+              <button
+                key={f.key}
+                onClick={() => setFilter(f.key)}
+                className={`text-xs rounded-md px-3 py-1.5 transition-colors cursor-pointer ${
+                  filter === f.key ? 'bg-brand text-white' : 'bg-control text-ink-2 hover:bg-control-hover'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+
+          <label className='flex items-center gap-2 bg-control border border-line focus-within:border-line-strong rounded-lg px-3 py-2 w-full sm:w-64'>
+            <Search size={16} className='text-ink-subtle shrink-0' />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder='Search merchant or category'
+              className='bg-transparent text-sm outline-none w-full placeholder:text-ink-subtle'
+            />
+          </label>
+        </div>
+
+        {loading ? (
+          <p className='py-6 text-center text-sm text-ink-subtle'>Loading transactions…</p>
+        ) : (
+          <TransactionsTable
+            transactions={visible}
+            detailed
+            emptyText={transactions.length ? 'No transactions match these filters' : 'No transactions yet'}
+          />
+        )}
+      </DashboardCard>
+    </PageShell>
   )
 }
 

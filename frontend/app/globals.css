@@ -45,6 +45,73 @@
   --radius-2xl: calc(var(--radius) + 8px);
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
+
+  /* App palette — switches with the .dark class on <html> */
+  --color-surface: var(--app-surface);
+  --color-chrome: var(--app-chrome);
+  --color-panel: var(--app-panel);
+  --color-control: var(--app-control);
+  --color-control-hover: var(--app-control-hover);
+  --color-line: var(--app-line);
+  --color-line-soft: var(--app-line-soft);
+  --color-line-strong: var(--app-line-strong);
+  --color-ink: var(--app-ink);
+  --color-ink-2: var(--app-ink-2);
+  --color-ink-muted: var(--app-ink-muted);
+  --color-ink-subtle: var(--app-ink-subtle);
+  --color-pos: var(--app-pos);
+  --color-neg: var(--app-neg);
+  --color-brand: var(--app-brand);
+  --color-brand-hover: var(--app-brand-hover);
+  --color-brand-ink: var(--app-brand-ink);
+  --color-peach: var(--app-peach);
+  --color-peach-ink: var(--app-peach-ink);
+}
+
+:root {
+  --app-surface: #f4f4f6;
+  --app-chrome: #ffffff;
+  --app-panel: #ffffff;
+  --app-control: #f0f0f3;
+  --app-control-hover: #e5e5ea;
+  --app-line: rgb(0 0 0 / 0.1);
+  --app-line-soft: rgb(0 0 0 / 0.06);
+  --app-line-strong: rgb(0 0 0 / 0.22);
+  --app-ink: #111114;
+  --app-ink-2: #3f3f46;
+  --app-ink-muted: #6b6b76;
+  --app-ink-subtle: #8e8e99;
+  --app-pos: #16a34a;
+  --app-neg: #dc2626;
+  --app-brand: #8b5cf6;
+  --app-brand-hover: #7c3aed;
+  --app-brand-ink: #7c3aed;
+  --app-peach: #f2a65a;
+  --app-peach-ink: #b45309;
+  color-scheme: light;
+}
+
+.dark {
+  --app-surface: #0b0b0b;
+  --app-chrome: #000000;
+  --app-panel: #161616;
+  --app-control: #242424;
+  --app-control-hover: #303030;
+  --app-line: rgb(255 255 255 / 0.1);
+  --app-line-soft: rgb(255 255 255 / 0.05);
+  --app-line-strong: rgb(255 255 255 / 0.22);
+  --app-ink: #fafafa;
+  --app-ink-2: #d4d4d4;
+  --app-ink-muted: #a3a3a3;
+  --app-ink-subtle: #737373;
+  --app-pos: #4ade80;
+  --app-neg: #f87171;
+  --app-brand: #8b5cf6;
+  --app-brand-hover: #7c4ddf;
+  --app-brand-ink: #a78bfa;
+  --app-peach: #f9d7b5;
+  --app-peach-ink: #f9d7b5;
+  color-scheme: dark;
 }
 
 body {
@@ -70,17 +137,17 @@ body {
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: transparent;
   border-radius: 10px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #888;
+  background: var(--app-control-hover);
   border-radius: 10px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #555;
+  background: var(--app-ink-subtle);
 }
 
 :root {

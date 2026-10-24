@@ -1,45 +1,48 @@
 'use client'
 
-import { Bell, CircleUserRound } from 'lucide-react'
+import { LogOut } from 'lucide-react'
 import { signOut, useSession } from 'next-auth/react'
-import { Button } from "@/components/ui/button"
-import { 
-  DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger 
+import ThemeToggle from '@/components/ThemeToggle'
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu"
 
 const CustomHeader = ({title}: {title: string}) => {
   const { data: session } = useSession()
-  const initial = session?.user?.name
+  const name = session?.user?.name
+  const email = session?.user?.email
 
   return (
-    <div className='flex w-full justify-between mx-10 text-2xl font-semibold'>
-        <h1>{title}</h1>
+    <div className='flex w-full items-center justify-between mx-6 lg:mx-10'>
+        <h1 className='text-3xl font-semibold'>{title}</h1>
 
-        <div className='flex items-center gap-10'>
-            <Bell />
+        <div className='flex items-center gap-3'>
+            <ThemeToggle />
 
-            {/* <div className='flex items-center gap-2'>
-              <CircleUserRound />
-              {session?.user?.name && (
-                <span className='text-sm font-medium'>{session.user.name}</span>
-              )}
-            </div> */}
-            
             <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button className='text-black rounded-full text-xl px-2.5' variant="outline">{initial?.charAt(0) || "Profile"}</Button>
+              <DropdownMenuTrigger
+                className='size-10 rounded-full bg-brand hover:bg-brand-hover text-white font-semibold cursor-pointer transition-colors'
+                aria-label='Account menu'
+              >
+                {name?.charAt(0).toUpperCase() || 'U'}
               </DropdownMenuTrigger>
-              <DropdownMenuContent className='mr-4 p-0' aria-modal={false}>
-                <DropdownMenuGroup>
-                  <DropdownMenuItem className='p-1'>
-                    <Button 
-                      className='bg-transparent w-full text-black hover:text-white cursor-pointer'
-                      onClick={() => signOut({ callbackUrl: '/sign-in' })}
-                    >
-                      Log Out
-                    </Button>
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
+              <DropdownMenuContent align='end' className='min-w-52 bg-panel border-line text-ink'>
+                {(name || email) && (
+                  <>
+                    <DropdownMenuLabel className='font-normal'>
+                      <p className='text-sm font-medium truncate'>{name}</p>
+                      <p className='text-xs text-ink-muted truncate'>{email}</p>
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator className='bg-line' />
+                  </>
+                )}
+                <DropdownMenuItem
+                  className='cursor-pointer text-ink-2 focus:bg-control focus:text-ink'
+                  onClick={() => signOut({ callbackUrl: '/sign-in' })}
+                >
+                  <LogOut className='size-4' />
+                  Log Out
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
         </div>
