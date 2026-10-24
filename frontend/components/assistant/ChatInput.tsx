@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, KeyboardEvent } from 'react'
-import { ArrowRightToLine } from 'lucide-react'
+import { ArrowUp } from 'lucide-react'
 
 const ChatInput = ({ onSendMessage, disabled = false }: ChatInputProps) => {
   const [input, setInput] = useState('')
@@ -21,31 +21,33 @@ const ChatInput = ({ onSendMessage, disabled = false }: ChatInputProps) => {
   }
 
   return (
-    <div className="border-t border-gray-700 bg-[#0f1c33] p-4">
-      <div className="flex gap-2 items-end">
-        <textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyPress}
-          placeholder="Type your message..."
-          disabled={disabled}
-          rows={1}
-          className="flex-1 bg-[#1a2942] text-white rounded-lg px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed max-h-32 overflow-y-auto"
-          style={{
-            minHeight: '48px',
-            maxHeight: '128px'
-          }}
-        />
-        <button
-          onClick={handleSend}
-          disabled={disabled || !input.trim()}
-          className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg p-3 transition-colors"
-          aria-label="Send message"
-        >
-          <ArrowRightToLine className='w-5 h-5' />
-        </button>
+    <div className="px-6 pb-6 pt-2">
+      <div className="max-w-3xl mx-auto">
+        <div className="flex gap-2 items-end bg-panel border border-line focus-within:border-line-strong rounded-2xl p-2 pl-4 transition-colors">
+          <textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyPress}
+            placeholder="Ask about your finances..."
+            disabled={disabled}
+            rows={1}
+            className="flex-1 bg-transparent text-sm text-ink placeholder:text-ink-subtle py-2.5 resize-none outline-none disabled:opacity-50 disabled:cursor-not-allowed overflow-y-auto"
+            style={{
+              minHeight: '40px',
+              maxHeight: '128px'
+            }}
+          />
+          <button
+            onClick={handleSend}
+            disabled={disabled || !input.trim()}
+            className="bg-brand hover:bg-brand-hover disabled:bg-control disabled:text-ink-subtle disabled:cursor-not-allowed text-white rounded-xl p-2.5 transition-colors cursor-pointer"
+            aria-label="Send message"
+          >
+            <ArrowUp className='size-5' />
+          </button>
+        </div>
+        <p className="text-[11px] text-ink-subtle mt-2 text-center">Press Enter to send, Shift + Enter for new line</p>
       </div>
-      <p className="text-xs text-gray-500 mt-2">Press Enter to send, Shift + Enter for new line</p>
     </div>
   )
 }

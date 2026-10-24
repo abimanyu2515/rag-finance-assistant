@@ -1,7 +1,6 @@
 'use client'
 
-import CustomHeader from '@/components/CustomHeader'
-import { useSidebar } from '@/contexts/SidebarContext'
+import PageShell from '@/components/PageShell'
 import { useEffect, useRef, useState } from 'react'
 import { ConversationDetail, Message } from '@/types/chat'
 import MessageList from '@/components/assistant/MessageList'
@@ -20,8 +19,6 @@ const Chatbot = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
-
-  const { isCollapsed } = useSidebar();
 
   const loadConversation = async (conversationId: string) => {
     if (!USER_ID) return;
@@ -101,7 +98,7 @@ const Chatbot = () => {
             }
 
             if (parsed.saved) {
-              window.dispatchEvent(new CustomEvent("ai-chat: refresh-conversations"))
+              window.dispatchEvent(new CustomEvent("ai-chat:refresh-conversations"))
             }
 
             if (parsed.error) {
@@ -171,21 +168,15 @@ const Chatbot = () => {
   }
 
   return (
-    <>
-      <div className={`fixed top-0 right-0 h-20 flex items-center bg-[#11213d] border-b z-30 transition-all duration-300 ${
-        isCollapsed ? 'left-20' : 'left-64'
-      }`}>
-        <CustomHeader title='AI ASSISTANT' />
-      </div>
-
-      <div className={`fixed top-20 bottom-0 right-0 flex flex-col bg-[#0f1c33] transition-all duration-300 ${
-        isCollapsed ? 'left-20' : 'left-64'
-      }`}>
-        <MessageList messages={messages} isLoading={loading} initial={initial} />
-        <ChatInput onSendMessage={handleSendMessage} disabled={loading} />
-      </div>
-      
-    </>
+    <PageShell title='AI Assistant' fixed>
+      <MessageList
+        messages={messages}
+        isLoading={loading}
+        initial={initial ?? undefined}
+        onSuggestion={handleSendMessage}
+      />
+      <ChatInput onSendMessage={handleSendMessage} disabled={loading} />
+    </PageShell>
   )
 }
 

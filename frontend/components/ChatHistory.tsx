@@ -1,33 +1,31 @@
 'use client'
 
 import { ChatHistoryProps } from '@/types/chat'
-import { PlusCircle, Trash2 } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react'
 
 const ChatHistory = ({ conversations, currentConversationId, onSelectConversation, onNewChat, onDeleteConversation, isLoading }: ChatHistoryProps) => {
   const [hoverId, setHoverId] = useState<string | null>(null);
-    
-  return (
-    <div className="w-60 flex flex-col h-full">
-      <div className="p-1 border-b border-gray-700">
-        <button
-          onClick={onNewChat}
-          className="w-full flex items-center gap-2 px-3 py-2 border border-transparent hover:border-blue-700 text-white rounded-lg transition-colors"
-        >
-          <PlusCircle className="w-4 h-4" />
-          <span className="font-medium">New Chat</span>
-        </button>
-      </div>
 
-      <div className='flex-1 overflow-y-auto p-2'>
+  return (
+    <div className="flex flex-col flex-1 min-h-0">
+      <button
+        onClick={onNewChat}
+        className="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-brand hover:bg-brand-hover text-white text-sm font-medium rounded-lg transition-colors cursor-pointer"
+      >
+        <Plus className="w-4 h-4" />
+        New Chat
+      </button>
+
+      <p className='px-3 mt-6 mb-2 text-[11px] font-medium uppercase tracking-wider text-ink-subtle'>Recent chats</p>
+
+      <div className='flex-1 overflow-y-auto custom-scrollbar'>
         {isLoading ? (
-            <div className='flex items-center justify-center h-20 text-gray-500'>
-                <div className='animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent'></div>
+            <div className='flex items-center justify-center h-20'>
+                <div className='animate-spin rounded-full h-5 w-5 border-2 border-brand border-t-transparent'></div>
             </div>
         ) : conversations.length === 0 ? (
-            <div className='text-start text-sm text-gray-400 mt-2 px-4'>
-                <p>No conversations yet.</p>
-            </div>
+            <p className='text-sm text-ink-subtle px-3'>No conversations yet.</p>
         ) : (
             <div className='space-y-1'>
                 {conversations.map((conv) => (
@@ -35,24 +33,24 @@ const ChatHistory = ({ conversations, currentConversationId, onSelectConversatio
                       key={conv._id}
                       className={`relative group rounded-lg transition-colors ${
                         currentConversationId === conv._id
-                          ? 'bg-[#1a2942]'
-                          : 'hover:bg-[#0f1c33]'
+                          ? 'bg-control'
+                          : 'hover:bg-control'
                       }`}
                       onMouseEnter={() => setHoverId(conv._id)}
                       onMouseLeave={() => setHoverId(null)}
                     >
                         <button
                           onClick={() => onSelectConversation(conv._id)}
-                          className='w-full text-left px-3 py-2.5 flex items-start gap-2'
+                          className='w-full text-left px-3 py-2 pr-9 cursor-pointer'
                         >
-                            <div className='flex-1 min-w-0'>
-                                <p className='text-sm text-white truncate font-medium'>
-                                    {conv.title || 'Untitled Conversation'}
-                                </p>
-                                <p className='text-sm text-gray-400 truncate font-medium'>
-                                    {conv.lastMessage}
-                                </p>
-                            </div>
+                            <p className='text-sm text-ink truncate font-medium'>
+                                {conv.title || 'Untitled Conversation'}
+                            </p>
+                            {conv.lastMessage && (
+                              <p className='text-xs text-ink-subtle truncate mt-0.5'>
+                                  {conv.lastMessage}
+                              </p>
+                            )}
                         </button>
 
                         {hoverId === conv._id && (
@@ -63,10 +61,10 @@ const ChatHistory = ({ conversations, currentConversationId, onSelectConversatio
                                     onDeleteConversation(conv._id)
                                 }
                               }}
-                              className='absolute right-2 top-2 p-1.5 border border-red-600 hover:bg-red-600 rounded text-white opacity-0 group-hover:opacity-100 transition-opacity'
+                              className='absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-md text-ink-subtle hover:text-neg hover:bg-neg/10 transition-colors cursor-pointer'
                               aria-label='Delete Conversation'
                             >
-                              <Trash2  className='w-3 h-3.5' />  
+                              <Trash2 className='w-3.5 h-3.5' />
                             </button>
                         )}
                     </div>

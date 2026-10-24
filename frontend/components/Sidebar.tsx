@@ -21,13 +21,6 @@ const Sidebar = () => {
   const USER_ID = (session?.user as { _id?: string; id?: string } | undefined)?._id
     ?? (session?.user as { _id?: string; id?: string } | undefined)?.id;
 
-  useEffect(() => {
-    if (session?.user) {
-      console.log('User details:', session.user);
-      console.log('User ID:', USER_ID);
-    }
-  }, [session, USER_ID]);
-  
   const { isCollapsed, setIsCollapsed } = useSidebar();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
@@ -66,7 +59,7 @@ const Sidebar = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: USER_ID })
       });
-      
+
       if (response.ok) {
         setConversations((prev) => prev.filter((c) => c._id !== conversationId));
         if (currentConversationId === conversationId) {
@@ -97,51 +90,59 @@ const Sidebar = () => {
   }, [pathname, USER_ID]);
 
   return (
-    <div 
-      className={`fixed left-0 top-0 h-screen bg-black border-r border-gray-500 transition-all duration-300 ease-in-out z-40 ${
+    <div
+      className={`fixed left-0 top-0 h-screen flex flex-col bg-chrome border-r border-line transition-all duration-300 ease-in-out z-40 ${
         isCollapsed ? 'w-20' : 'w-64'
       }`}
     >
       {/* Logo */}
-      <div className="flex items-center justify-between h-20 px-6 border-b">
-        {!isCollapsed ? (
-          <h1 className="text-2xl font-bold">QueryFi</h1>
-        ) : 
-        (
-          <h1 className='text-xl font-bold text-title'>QF</h1>
-        )}
+      <div className={`flex items-center gap-3 h-20 shrink-0 border-b border-line ${isCollapsed ? 'justify-center' : 'px-6'}`}>
+        <span className='size-9 shrink-0 rounded-xl bg-brand text-white flex items-center justify-center text-sm font-bold'>
+          QF
+        </span>
+        {!isCollapsed && <h1 className="text-xl font-semibold">QueryFi</h1>}
       </div>
 
       {/* Collapse Button */}
       <button
         onClick={() => setIsCollapsed(!isCollapsed)}
-        className="absolute -right-3 top-24 bg-[#6366f1] text-white rounded-full p-1.5 shadow-lg hover:bg-[#5558e3] transition-colors cursor-pointer z-10"
+        className="absolute -right-3 top-24 size-6 flex items-center justify-center bg-panel border border-line text-ink-muted hover:text-ink hover:border-line-strong rounded-full shadow-sm transition-colors cursor-pointer z-10"
+        aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
       >
-        {isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+        {isCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
       </button>
 
       {/* Navigation */}
-      <nav className="flex flex-col justify-between h-[calc(100vh-5rem)] mt-5 py-8">
-        <div className="space-y-2 px-3">
-          {navItems.map((item) => (
-            <Link
-              key={item.name}
-              href={item.href}
-              className={`w-full flex items-center gap-4 px-4 py-3 rounded-lg transition-all duration-200 ${
-                pathname === item.href
-                  ? 'bg-[#6366f1] text-white'
-                  : 'text-gray-400 hover:bg-[#2d3748] hover:text-white'
-              } ${isCollapsed ? 'justify-center' : ''}`}
-              title={isCollapsed ? item.name : ''}
-            >
-              <span className="flex shrink-0">{item.icon}</span>
-              {!isCollapsed && (
-                <span className="text-sm font-medium whitespace-nowrap">{item.name}</span>
-              )}
-            </Link>
-          ))}
+      <nav className="flex flex-col flex-1 min-h-0 pt-8 pb-6">
+        {!isCollapsed && (
+          <p className='px-6 mb-3 text-[11px] font-medium uppercase tracking-wider text-ink-subtle'>Menu</p>
+        )}
+        <div className="space-y-1 px-3">
+          {navItems.map((item) => {
+            const active = pathname === item.href;
+            return (
+              <Link
+                key={item.name}
+                href={item.href}
+                className={`relative w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  active
+                    ? 'bg-control text-ink'
+                    : 'text-ink-muted hover:bg-control hover:text-ink'
+                } ${isCollapsed ? 'justify-center' : ''}`}
+                title={isCollapsed ? item.name : ''}
+              >
+                {active && <span className='absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-brand' />}
+                <span className={`flex shrink-0 ${active ? 'text-brand' : ''}`}>{item.icon}</span>
+                {!isCollapsed && (
+                  <span className="whitespace-nowrap">{item.name}</span>
+                )}
+              </Link>
+            );
+          })}
+        </div>
 
-          {!isCollapsed && pathname === '/ai-assistant' && (
+        {!isCollapsed && pathname === '/ai-assistant' && (
+          <div className='flex flex-col flex-1 min-h-0 mt-6 px-3'>
             <ChatHistory
               conversations={conversations}
               currentConversationId={currentConversationId}
@@ -158,8 +159,8 @@ const Sidebar = () => {
               }}
               isLoading={loadingConversations}
             />
-          )}
-        </div>
+          </div>
+        )}
       </nav>
     </div>
   );
