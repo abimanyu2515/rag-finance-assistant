@@ -9,7 +9,7 @@ import { supabase } from "../config/supabase.js";
  * shape it always has (amount, merchant, isSuspicious, timestamp, ...).
  */
 
-const fromRow = (row) =>
+export const fromRow = (row) =>
   row && {
     _id: row.id,
     userId: row.user_id,
