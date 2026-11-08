@@ -24,13 +24,13 @@ Frontend (`cd frontend`):
 - `npm run dev` / `npm run build` / `npm run start`
 - `npm run lint` — ESLint (the only static check in the repo)
 
-There is no test suite in either project. The closest thing is the chat eval: `node src/scripts/evalChat.js --email <user> [--modes rag,tools] [--only 1,4]` (in `backend-node`) runs `eval/questions.json` through both chat modes against a user with `young_professional` demo data and writes `eval/results.md` (ground truth comes from calling the tools directly).
+There is no test suite in either project. The closest thing is the chat eval: `node src/scripts/evalChat.js --email <user> [--modes rag,tools] [--only 1,4]` (in `backend-node`) runs `eval/questions.json` through both chat modes against a user with `young_professional` demo data and writes `eval/results.md` (questions with a `language` field are passed as voice-language turns) (ground truth comes from calling the tools directly).
 
 Ollama must be running with `nomic-embed-text` pulled (`ollama pull nomic-embed-text`). The README still lists `qwen2.5:7b`, but the chat LLM has moved to Groq and that model is no longer used.
 
 ## Environment
 
-`backend-node/.env`: `PORT`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `JWT_SECRET`, `OLLAMA_URL`, `GROQ_API_KEY`. Optional chat: `GROQ_MODEL` (default `qwen/qwen3.8-27b`, must support tool calling), `CHAT_MODE` (`tools` default, `rag` = old baseline). Optional Plaid Sandbox: `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV` (default `sandbox`), `PLAID_TOKEN_KEY` (64 hex chars, AES-256-GCM key for stored access tokens), `USD_TO_INR` (default 83). Without the Plaid vars, `/api/plaid/*` returns 503 and the frontend hides bank actions.
+`backend-node/.env`: `PORT`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `JWT_SECRET`, `OLLAMA_URL`, `GROQ_API_KEY`. Optional chat: `GROQ_MODEL` (default `qwen/qwen3.8-27b`, must support tool calling), `CHAT_MODE` (`tools` default, `rag` = old baseline). Optional Plaid Sandbox: `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV` (default `sandbox`), `PLAID_TOKEN_KEY` (64 hex chars, AES-256-GCM key for stored access tokens), `USD_TO_INR` (default 83). Without the Plaid vars, `/api/plaid/*` returns 503 and the frontend hides bank actions. Optional voice: `SARVAM_API_KEY` (Sarvam AI speech to text + text to speech), plus `SARVAM_STT_MODEL` (default `saaras:v3`), `SARVAM_STT_MODE` (default `codemix`), `SARVAM_TTS_MODEL` (default `bulbul:v3`), `SARVAM_TTS_SPEAKER` (default `shubh`, must be valid for the TTS model). Without the key, `/api/voice/config` reports `enabled: false` and the frontend hides the mic and read-aloud buttons.
 `frontend/.env`: `NEXT_PUBLIC_BACKEND_URL`, `NEXTAUTH_URL`, `NEXTAUTH_SECRET`.
 
 The backend must use the Supabase **service_role** key. Auth is the app's own JWT, not Supabase Auth, so `auth.uid()` is always NULL and RLS would silently return zero rows with the anon key. Because RLS is effectively bypassed, every query must filter by `user_id` explicitly.
@@ -60,6 +60,8 @@ Schema lives in `backend-node/src/supabase/schema.sql` (README says `supabase/sc
 SSE event order the frontend (`app/(root)/ai-assistant/page.tsx`) relies on: `{conversationId}` → `{status}`* (tool progress label) → many `{token}` → `{done}` → `{saved}`; `{error}` on failure. Change both sides together.
 
 Adding a tool: handler + schema + `TOOL_STATUS` label in `financeTools.js`; keep it read-only and filtered by `user_id`.
+
+Voice (English, Hindi, Tamil, Telugu, Kannada, Malayalam): `services/sarvam.js` + `routes/voiceRoutes.js` (all `protect`). `POST /api/voice/transcribe?language=<code|auto>` takes the raw recorded audio (browser webm/opus, max 5 MB, about 30 s) and returns `{transcript, languageCode}`. The frontend puts the transcript in the input box so the user can edit it, and it doesn't auto-send. `/api/chat` accepts an optional `language` (only codes in `LANGUAGES` from `sarvam.js` are honored), and `aiService.js` adds a LANGUAGE block telling the model to reply in that language with ₹ digits while keeping tool arguments in English. `POST /api/voice/speak {text, language}` strips markdown and returns mp3. `LANGUAGES` in `sarvam.js` and `VOICE_LANGUAGES` in `frontend/lib/voice.ts` must stay in sync.
 
 The embedding text format in `utils/ingestTransactions.js` determines retrieval quality; changing it requires re-running ingest for all rows.
 

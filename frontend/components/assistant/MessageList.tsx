@@ -2,7 +2,8 @@
 
 import { useEffect, useRef } from 'react'
 import { Sparkles } from 'lucide-react'
-import MessageBubble from './MessageBubble'
+import MessageBubble, { type SpeakState } from './MessageBubble'
+import type { Message } from '@/types/chat'
 import TypingIndicator from './TypingIndicator'
 
 const SUGGESTIONS = [
@@ -16,9 +17,12 @@ type Props = MessageListProps & {
   initial?: string
   status?: string
   onSuggestion?: (prompt: string) => void
+  /** Read-aloud; omitted when voice is disabled */
+  onSpeak?: (message: Message) => void
+  speaking?: { id: string; state: SpeakState } | null
 }
 
-const MessageList = ({ messages, isLoading = false, initial, status, onSuggestion }: Props) => {
+const MessageList = ({ messages, isLoading = false, initial, status, onSuggestion, onSpeak, speaking }: Props) => {
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const scrollToBottom = () => {
@@ -62,9 +66,19 @@ const MessageList = ({ messages, isLoading = false, initial, status, onSuggestio
           </div>
         ) : (
           <>
-            {visibleMessages.map((message) => (
-              <MessageBubble key={message.id} message={message} initial={initial} />
-            ))}
+            {visibleMessages.map((message, i) => {
+              // No read-aloud on the reply that is still streaming
+              const streaming = isLoading && i === visibleMessages.length - 1 && message.role === 'assistant'
+              return (
+                <MessageBubble
+                  key={message.id}
+                  message={message}
+                  initial={initial}
+                  onSpeak={streaming ? undefined : onSpeak}
+                  speakState={speaking && speaking.id === message.id ? speaking.state : undefined}
+                />
+              )
+            })}
             {awaitingFirstToken && <TypingIndicator status={status} />}
           </>
         )}

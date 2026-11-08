@@ -8,6 +8,7 @@ import chatRoutes from './src/routes/chatRoutes.js';
 import conversationRoutes from './src/routes/conversationRoutes.js'
 import transactionRoutes from './src/routes/transactionRoutes.js';
 import plaidRoutes from './src/routes/plaidRoutes.js';
+import voiceRoutes from './src/routes/voiceRoutes.js';
 
 dotenv.config();
 connectDB();
@@ -21,6 +22,7 @@ app.use('/api/chat', chatRoutes);
 app.use('/api/conversations', conversationRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/plaid', plaidRoutes);
+app.use('/api/voice', voiceRoutes);
 
 app.listen(process.env.PORT, () => {
   console.log("Server running");

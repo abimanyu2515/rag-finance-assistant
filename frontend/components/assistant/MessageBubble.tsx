@@ -1,10 +1,21 @@
 import { Message } from '@/types/chat'
-import { Sparkles } from 'lucide-react';
+import { Loader2, Sparkles, Square, Volume2 } from 'lucide-react';
 import MarkdownContent from './MarkdownContent';
 
-const MessageBubble = ({ message, initial }: { message: Message; initial?: string }) => {
+export type SpeakState = 'loading' | 'playing'
+
+type Props = {
+  message: Message
+  initial?: string
+  /** Read-aloud: undefined hides the button (voice disabled or still streaming) */
+  onSpeak?: (message: Message) => void
+  speakState?: SpeakState
+}
+
+const MessageBubble = ({ message, initial, onSpeak, speakState }: Props) => {
   const isUser = message.role === 'user';
   const isError = !isUser && message.content.startsWith('[Error');
+  const canSpeak = !isUser && !isError && !!onSpeak && message.content.trim() !== '';
 
   return (
     <div className={`flex gap-3 ${ isUser ? 'flex-row-reverse' : 'flex-row' }`}>
@@ -25,12 +36,26 @@ const MessageBubble = ({ message, initial }: { message: Message; initial?: strin
             : <MarkdownContent content={message.content} />}
         </div>
 
-        <span className='text-[11px] text-ink-subtle mt-1.5 px-1'>
-          {new Date(message.created_at).toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit',
-          })}
-        </span>
+        <div className='flex items-center gap-1 mt-1 px-1'>
+          <span className='text-[11px] text-ink-subtle'>
+            {new Date(message.created_at).toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
+          </span>
+          {canSpeak && (
+            <button
+              onClick={() => onSpeak(message)}
+              className={`p-1 rounded-md transition-colors cursor-pointer hover:bg-control ${speakState ? 'text-brand' : 'text-ink-subtle hover:text-ink'}`}
+              aria-label={speakState === 'playing' ? 'Stop reading aloud' : 'Read aloud'}
+              title={speakState === 'playing' ? 'Stop' : 'Read aloud'}
+            >
+              {speakState === 'loading'
+                ? <Loader2 className='size-3.5 animate-spin' />
+                : speakState === 'playing' ? <Square className='size-3.5' /> : <Volume2 className='size-3.5' />}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )

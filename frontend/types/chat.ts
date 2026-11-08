@@ -3,6 +3,8 @@ export interface Message {
     role: 'user' | 'assistant';
     content: string;
     created_at: Date;
+    /** Reply language the user spoke in (e.g. "ta-IN"); picks the voice for read-aloud */
+    language?: string;
 }
 
 export interface Conversation {

@@ -23,18 +23,19 @@ const MAX_TOOL_ROUNDS = 3;
  * @param {string}   p.message
  * @param {Array}    p.history  - recent {role, content} turns, oldest first
  * @param {"tools"|"rag"} [p.mode]
+ * @param {string}   [p.language] - reply language code from voice input (services/sarvam.js LANGUAGES)
  * @param {(token: string) => void}  [p.onToken]
  * @param {(status: string) => void} [p.onStatus] - progress label while tools run
  * @returns {Promise<{reply: string, toolCalls: Array<{name, args, result}>}>}
  */
-export const runChat = async ({ userId, message, history = [], mode = "tools", onToken = () => {}, onStatus = () => {} }) => {
+export const runChat = async ({ userId, message, history = [], mode = "tools", language, onToken = () => {}, onStatus = () => {} }) => {
   const userName = (await findUserNameById(userId).catch(() => null)) || "the user";
   return mode === "rag"
-    ? runRag({ userId, userName, message, history, onToken })
-    : runTools({ userId, userName, message, history, onToken, onStatus });
+    ? runRag({ userId, userName, message, history, language, onToken })
+    : runTools({ userId, userName, message, history, language, onToken, onStatus });
 };
 
-const runRag = async ({ userId, userName, message, history, onToken }) => {
+const runRag = async ({ userId, userName, message, history, language, onToken }) => {
   const [embedding, recent] = await Promise.all([
     embedText(message),
     findTransactionsByUser(userId, { sort: "desc", limit: 100 }),
@@ -46,6 +47,7 @@ const runRag = async ({ userId, userName, message, history, onToken }) => {
     question: message,
     history,
     userName,
+    language,
     summary: buildFinancialSummary(recent),
     relevantTransactions,
   });
@@ -57,9 +59,9 @@ const runRag = async ({ userId, userName, message, history, onToken }) => {
 // Groq answers 400 (code "tool_use_failed") when the model writes a malformed tool call.
 const isToolCallFailure = (err) => err?.status === 400;
 
-const runTools = async ({ userId, userName, message, history, onToken, onStatus }) => {
+const runTools = async ({ userId, userName, message, history, language, onToken, onStatus }) => {
   const overview = await getDataOverview(userId);
-  const messages = buildMessages({ mode: "tools", question: message, history, userName, overview });
+  const messages = buildMessages({ mode: "tools", question: message, history, userName, overview, language });
   const toolCalls = [];
 
   let reply = "";

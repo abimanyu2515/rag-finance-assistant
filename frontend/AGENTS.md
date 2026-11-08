@@ -16,6 +16,7 @@ Next.js 16 App Router client for the finance app: sign in, dashboard, transactio
 | `lib/dashboard.ts` | INR formatters (`fmt`, `fmtCompact`), date formatters, range filtering (`applyRange`) |
 | `app/(root)/ai-assistant/page.tsx` | SSE chat consumer (event order contract in root `## Chat / RAG flow`); shows `{status}` tool labels in `TypingIndicator` until the first token |
 | `components/transactions/AddDataMenu.tsx` | Demo data and Plaid Link actions |
+| `lib/voice.ts`, `lib/useRecorder.ts` | Voice chat: language picker store, `/api/voice/*` calls, and the MediaRecorder hook (30 s cap) used by `ChatInput`; read-aloud playback lives in the ai-assistant page |
 | `app/globals.css` | Tailwind v4 `@theme` tokens and the light/dark palette |
 
 ## Conventions

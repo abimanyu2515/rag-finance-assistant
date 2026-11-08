@@ -1,4 +1,5 @@
 import Groq from "groq-sdk";
+import { LANGUAGES } from "../services/sarvam.js";
 
 /**
  * Groq client + prompt builders for the chat (orchestrated by services/chatAgent.js).
@@ -104,6 +105,20 @@ ANSWERING
 - If nothing matches, say so plainly. For advice, base it on their actual numbers.
 `.trim();
 
+// ─── Reply language (voice input in English + 5 Indian languages) ────────
+
+const languageRules = (language) => {
+  const name = LANGUAGES[language];
+  return `
+LANGUAGE
+${name && language !== "en-IN"
+  ? `- The user is speaking ${name}. Reply in ${name}, in its native script. Mixing in the English words they used (e.g. "food", "Swiggy") is fine.`
+  : "- Reply in the language and script the user wrote in. If they mix languages (e.g. Tamil + English), reply in the same mix."}
+- Keep amounts as ₹ with digits (₹1,25,000), never spelled out in words.
+- Tool arguments (categories, merchants, dates) always stay in English, using the exact names listed above.
+`.trim();
+};
+
 /**
  * Builds the message array for either mode.
  * @param {object} p
@@ -114,11 +129,12 @@ ANSWERING
  * @param {object} [p.summary]               - rag: buildFinancialSummary() output
  * @param {object[]} [p.relevantTransactions] - rag: semantic matches
  * @param {{months: string[], categories: string[]}} [p.overview] - tools: what data exists
+ * @param {string} [p.language]              - reply language code from voice input
  */
-export const buildMessages = ({ mode, question, history = [], userName, summary, relevantTransactions = [], overview }) => {
-  const system = mode === "rag"
+export const buildMessages = ({ mode, question, history = [], userName, summary, relevantTransactions = [], overview, language }) => {
+  const system = (mode === "rag"
     ? ragSystemPrompt({ userName, summary, relevantTransactions })
-    : toolsSystemPrompt({ userName, overview });
+    : toolsSystemPrompt({ userName, overview })) + "\n\n" + languageRules(language);
 
   const messages = [{ role: "system", content: system }];
   for (const turn of history) messages.push({ role: turn.role, content: turn.content });
