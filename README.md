@@ -281,6 +281,20 @@ OLLAMA_URL=http://localhost:11434
 
 # Backend URL (self-reference)
 BACKEND_URL=http://localhost:5000
+
+# Groq (chat LLM)
+GROQ_API_KEY=your_groq_api_key_here
+
+# Plaid Sandbox (optional — enables "Connect bank" on the Transactions page)
+# Free keys: https://dashboard.plaid.com/developers/keys
+PLAID_CLIENT_ID=your_plaid_client_id
+PLAID_SECRET=your_plaid_sandbox_secret
+PLAID_ENV=sandbox
+# 32-byte hex key used to encrypt stored Plaid access tokens:
+#   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+PLAID_TOKEN_KEY=64_hex_chars
+# Plaid sandbox data is USD; amounts are converted at this fixed rate
+USD_TO_INR=83
 ```
 
 ### Frontend — `frontend/.env`
@@ -332,12 +346,19 @@ Supabase Connected
 Server running
 ```
 
-### Step 3: Ingest Transactions (Generate Embeddings)
+### Step 3: Add Transactions
 
-> **Run this once** after adding transactions to your `transactions` table in Supabase. This embeds each transaction's description and stores the 768-dim vector directly on the row (`transactions.embedding`).
+Sign in, open **Transactions**, and use **Add data**:
+
+- **Load demo data** — generates 6 months of realistic INR transactions for a student, young-professional or family persona, including a few deliberately suspicious ones.
+- **Connect bank** — opens Plaid Link in Sandbox mode (needs the `PLAID_*` variables). Log in with username `user_transactions_dynamic` and any password. Plaid sandbox amounts are USD and are converted to INR.
+
+Imported rows are embedded immediately, so the assistant can search them right away.
+
+**Backfill only:** if you insert rows by hand in Supabase, or an import ran while Ollama was down, embed them with:
 
 ```bash
-# Terminal 3 (one-time operation, re-run after adding new transactions)
+# Terminal 3
 cd backend-node
 node src/scripts/ingest.js
 ```
@@ -434,6 +455,12 @@ ollama serve
 | `PATCH` | `/api/conversations/:id/title` | ✅ JWT | Rename a conversation |
 | `DELETE` | `/api/conversations/:id` | ✅ JWT | Delete a conversation |
 | `GET` | `/api/transactions` | ✅ JWT | Get the authenticated user's transactions |
+| `POST` | `/api/transactions/demo` | ✅ JWT | Generate + import synthetic INR data (`{ persona, months }`) |
+| `DELETE` | `/api/transactions?source=demo\|plaid` | ✅ JWT | Remove imported data from one source (`plaid` also unlinks the bank) |
+| `GET` | `/api/plaid/items` | ✅ JWT | List linked sandbox banks |
+| `POST` | `/api/plaid/link-token` | ✅ JWT | Create a Plaid Link token |
+| `POST` | `/api/plaid/exchange` | ✅ JWT | Exchange Link's public token, store the item, import transactions |
+| `POST` | `/api/plaid/sync` | ✅ JWT | Pull new transactions for every linked bank |
 
 ---
 

@@ -25,19 +25,24 @@ const Dashboard = () => {
 
   return (
     <PageShell title='Dashboard'>
-      <div className='flex flex-wrap items-center justify-between gap-4 mb-8'>
+      <div className='flex flex-wrap items-center justify-between gap-4 mb-6 lg:mb-8'>
         <p className='text-sm text-ink-muted'>
           Hello{firstName ? ` ${firstName}` : ''}, let&apos;s look at your financial data:
         </p>
         <RangeSelect value={range} onChange={setRange} label={rangeLabel} />
       </div>
 
-      <div className='grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6'>
+      <div className='grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6'>
         <BalanceSummaryCard transactions={filtered} rangeLabel={rangeLabel} byDay={byDay} />
         <SpendingCard transactions={filtered} rangeLabel={rangeLabel} previousSpend={previousSpend} />
         <FraudAlertsCard transactions={filtered} />
 
-        <RecentTransactionsCard transactions={filtered} rangeLabel={rangeLabel} className='md:col-span-2' />
+        <RecentTransactionsCard
+          transactions={filtered}
+          rangeLabel={rangeLabel}
+          className='md:col-span-2'
+          emptyText={txList.length ? undefined : 'No transactions yet. Open the full history to load demo data or connect a bank.'}
+        />
         <div className='flex flex-col gap-6 md:col-span-2 xl:col-span-1'>
           <SavingsCard transactions={filtered} />
           <AssistantPromoCard />

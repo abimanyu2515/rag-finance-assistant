@@ -14,7 +14,7 @@ const MessageBubble = ({ message, initial }: { message: Message; initial?: strin
         { isUser ? (initial?.charAt(0).toUpperCase() || 'U') : <Sparkles className='size-4' /> }
       </div>
 
-      <div className={`flex flex-col max-w-[75%] ${ isUser ? 'items-end' : 'items-start' }`}>
+      <div className={`flex flex-col min-w-0 max-w-[85%] sm:max-w-[75%] ${ isUser ? 'items-end' : 'items-start' }`}>
         <div className={`max-w-full min-w-0 rounded-2xl px-4 py-2.5 ${
           isUser
             ? 'bg-brand text-white rounded-tr-sm'

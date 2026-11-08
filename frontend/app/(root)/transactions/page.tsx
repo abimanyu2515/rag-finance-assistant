@@ -6,6 +6,7 @@ import PageShell from '@/components/PageShell'
 import DashboardCard from '@/components/dashboard/DashboardCard'
 import RangeSelect from '@/components/dashboard/RangeSelect'
 import TransactionsTable from '@/components/dashboard/TransactionsTable'
+import AddDataMenu from '@/components/transactions/AddDataMenu'
 import { type RangeKey, applyRange, fmt } from '@/lib/dashboard'
 import { useTransactions } from '@/lib/useTransactions'
 
@@ -19,7 +20,7 @@ const FILTERS: { key: Filter; label: string }[] = [
 ]
 
 const Transactions = () => {
-  const { transactions, loading } = useTransactions()
+  const { transactions, loading, refetch } = useTransactions()
   const [range, setRange] = useState<RangeKey>('all')
   const [filter, setFilter] = useState<Filter>('all')
   const [query, setQuery] = useState('')
@@ -50,23 +51,26 @@ const Transactions = () => {
 
   return (
     <PageShell title='Transactions'>
-      <div className='flex flex-wrap items-center justify-between gap-4 mb-8'>
+      <div className='flex flex-wrap items-center justify-between gap-4 mb-6 lg:mb-8'>
         <p className='text-sm text-ink-muted'>Every transaction on your account, newest first:</p>
-        <RangeSelect value={range} onChange={setRange} label={rangeLabel} />
+        <div className='flex flex-wrap items-start gap-3 sm:gap-4'>
+          <RangeSelect value={range} onChange={setRange} label={rangeLabel} />
+          <AddDataMenu onChange={refetch} />
+        </div>
       </div>
 
-      <div className='grid grid-cols-2 xl:grid-cols-4 gap-6 mb-6'>
+      <div className='grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-6 mb-6'>
         {summary.map(s => (
-          <div key={s.label} className='bg-panel border border-line-soft rounded-2xl px-6 py-5'>
+          <div key={s.label} className='min-w-0 bg-panel border border-line-soft rounded-2xl px-4 py-4 sm:px-6 sm:py-5'>
             <p className='text-xs text-ink-muted font-medium'>{s.label}</p>
-            <p className={`text-2xl mt-2 ${s.tone}`}>{s.value}</p>
+            <p className={`text-lg sm:text-2xl mt-2 truncate ${s.tone}`} title={s.value}>{s.value}</p>
           </div>
         ))}
       </div>
 
       <DashboardCard title='All Transactions' subtitle={rangeLabel}>
         <div className='flex flex-wrap items-center justify-between gap-4 mt-6 mb-4'>
-          <div className='flex gap-2'>
+          <div className='flex flex-wrap gap-2'>
             {FILTERS.map(f => (
               <button
                 key={f.key}
@@ -97,7 +101,9 @@ const Transactions = () => {
           <TransactionsTable
             transactions={visible}
             detailed
-            emptyText={transactions.length ? 'No transactions match these filters' : 'No transactions yet'}
+            emptyText={transactions.length
+              ? 'No transactions match these filters'
+              : 'No transactions yet. Use “Add data” above to load a demo account or connect a sandbox bank.'}
           />
         )}
       </DashboardCard>

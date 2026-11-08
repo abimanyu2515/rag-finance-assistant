@@ -6,6 +6,7 @@ import { ConversationDetail, Message } from '@/types/chat'
 import MessageList from '@/components/assistant/MessageList'
 import ChatInput from '@/components/assistant/ChatInput'
 import { useSession } from 'next-auth/react'
+import { toast } from 'sonner'
 
 const API_BASE_URL = `${process.env.NEXT_PUBLIC_BACKEND_URL}/api`
 
@@ -24,7 +25,7 @@ const Chatbot = () => {
     if (!USER_ID) return;
     try {
       const response = await fetch(`${API_BASE_URL}/conversations/${conversationId}?userId=${USER_ID}`);
-      if (!response.ok) return;
+      if (!response.ok) throw new Error(`Request failed (${response.status})`);
 
       const conversation: ConversationDetail = await response.json();
       const loadedMessages = conversation.messages.map((message, index) => ({
@@ -38,8 +39,13 @@ const Chatbot = () => {
       setCurrentConversationId(conversationId);
     } catch (error) {
       console.error('Error loading conversation:', error);
+      toast.error('Couldn’t open that conversation', { description: 'Please try again.' });
     }
   }
+
+  // Remove the assistant placeholder bubble if nothing was streamed into it
+  const dropIfEmpty = (id: string) =>
+    setMessages(prev => prev.filter(msg => msg.id !== id || msg.content.trim() !== ''))
 
   const handleSend = async (userMessage: Message) => {
     if (!USER_ID || !ACCESS_TOKEN) return;
@@ -70,7 +76,7 @@ const Chatbot = () => {
         })
       })
 
-      if (!response.body) throw new Error("No response body");
+      if (!response.ok || !response.body) throw new Error(`Request failed (${response.status})`);
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -102,10 +108,8 @@ const Chatbot = () => {
             }
 
             if (parsed.error) {
-              setMessages(prev => prev.map(msg => 
-                msg.id === aiMessageId ? 
-                    {...msg, content: `[Error]: ${parsed.error}`} : msg
-              ))
+              dropIfEmpty(aiMessageId)
+              toast.error('The assistant couldn’t answer', { description: String(parsed.error) })
             }
           } catch (e) {
             console.error('Error parsing message chunk:', e)
@@ -115,10 +119,8 @@ const Chatbot = () => {
 
     } catch (e) {
       console.error('Error sending message:', e)
-      setMessages(prev => prev.map(msg => 
-        msg.id === aiMessageId ? 
-            {...msg, content: "[Error generating response]"} : msg
-      ))
+      dropIfEmpty(aiMessageId)
+      toast.error('Couldn’t get a response', { description: 'Check that the backend is running and try again.' })
     } finally {
       setLoading(false)
     }

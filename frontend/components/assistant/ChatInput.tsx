@@ -21,7 +21,7 @@ const ChatInput = ({ onSendMessage, disabled = false }: ChatInputProps) => {
   }
 
   return (
-    <div className="px-6 pb-6 pt-2">
+    <div className="px-3 sm:px-6 pb-3 sm:pb-6 pt-2">
       <div className="max-w-3xl mx-auto">
         <div className="flex gap-2 items-end bg-panel border border-line focus-within:border-line-strong rounded-2xl p-2 pl-4 transition-colors">
           <textarea
@@ -31,7 +31,7 @@ const ChatInput = ({ onSendMessage, disabled = false }: ChatInputProps) => {
             placeholder="Ask about your finances..."
             disabled={disabled}
             rows={1}
-            className="flex-1 bg-transparent text-sm text-ink placeholder:text-ink-subtle py-2.5 resize-none outline-none disabled:opacity-50 disabled:cursor-not-allowed overflow-y-auto"
+            className="flex-1 min-w-0 bg-transparent text-base sm:text-sm text-ink placeholder:text-ink-subtle py-2.5 resize-none outline-none disabled:opacity-50 disabled:cursor-not-allowed overflow-y-auto"
             style={{
               minHeight: '40px',
               maxHeight: '128px'
@@ -46,7 +46,7 @@ const ChatInput = ({ onSendMessage, disabled = false }: ChatInputProps) => {
             <ArrowUp className='size-5' />
           </button>
         </div>
-        <p className="text-[11px] text-ink-subtle mt-2 text-center">Press Enter to send, Shift + Enter for new line</p>
+        <p className="hidden sm:block text-[11px] text-ink-subtle mt-2 text-center">Press Enter to send, Shift + Enter for new line</p>
       </div>
     </div>
   )

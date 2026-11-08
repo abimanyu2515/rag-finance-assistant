@@ -94,11 +94,11 @@ export const generateAIResponse = async (relevantTransactions, question, summary
   // ─── 5. Call Groq API ────────────────────────────────────────────────
 
   const stream = await groq.chat.completions.create({
-    model: "openai/gpt-oss-120b",   // Free, fast (~200 tok/s). Alternatives: "llama-3.3-70b-versatile" (smarter, still free)
+    model: "qwen/qwen3.8-27b",   // Free, fast (~200 tok/s). Alternatives: "llama-3.3-70b-versatile" (smarter, still free)
     messages,
     stream: true,
     max_tokens: 400,
-    temperature: 0.3,
+    temperature: 0.2,
   });
  
   // ─── 6. Stream tokens to client via SSE (same format as before) ───────

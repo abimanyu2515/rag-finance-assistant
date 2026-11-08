@@ -54,3 +54,30 @@ export const updateTransactionEmbedding = async (id, embedding) => {
 
   if (error) throw error;
 };
+/**
+ * Inserts rows (snake_case, with user_id/source/external_id set), skipping any
+ * that already exist for the same (user_id, source, external_id). Returns only
+ * the newly inserted rows, mapped to the app shape.
+ */
+export const upsertTransactions = async (rows) => {
+  if (rows.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from("transactions")
+    .upsert(rows, { onConflict: "user_id,source,external_id", ignoreDuplicates: true })
+    .select("id, user_id, amount, category, merchant, name, type, is_suspicious, timestamp");
+
+  if (error) throw error;
+  return data.map(fromRow);
+};
+
+export const deleteTransactionsBySource = async (userId, source) => {
+  const { error, count } = await supabase
+    .from("transactions")
+    .delete({ count: "exact" })
+    .eq("user_id", userId)
+    .eq("source", source);
+
+  if (error) throw error;
+  return count ?? 0;
+};

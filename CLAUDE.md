@@ -18,7 +18,7 @@ External services: Supabase (hosted Postgres + pgvector), Ollama (local, embeddi
 
 Backend (`cd backend-node`):
 - `npm run dev` — start with nodemon (port from `PORT`, normally 5000)
-- `node src/scripts/ingest.js` — embed every transaction via Ollama and write the vector to `transactions.embedding`. Re-run after inserting new transactions; un-embedded rows are invisible to semantic search.
+- `node src/scripts/ingest.js` — embed every transaction via Ollama and write the vector to `transactions.embedding`. Imports through the app embed on insert; this script is only a backfill for rows inserted by hand or imported while Ollama was down. Un-embedded rows are invisible to semantic search.
 
 Frontend (`cd frontend`):
 - `npm run dev` / `npm run build` / `npm run start`
@@ -30,7 +30,7 @@ Ollama must be running with `nomic-embed-text` pulled (`ollama pull nomic-embed-
 
 ## Environment
 
-`backend-node/.env`: `PORT`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `JWT_SECRET`, `OLLAMA_URL`, `GROQ_API_KEY`.
+`backend-node/.env`: `PORT`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `JWT_SECRET`, `OLLAMA_URL`, `GROQ_API_KEY`. Optional Plaid Sandbox: `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV` (default `sandbox`), `PLAID_TOKEN_KEY` (64 hex chars, AES-256-GCM key for stored access tokens), `USD_TO_INR` (default 83). Without the Plaid vars, `/api/plaid/*` returns 503 and the frontend hides bank actions.
 `frontend/.env`: `NEXT_PUBLIC_BACKEND_URL`, `NEXTAUTH_URL`, `NEXTAUTH_SECRET`.
 
 The backend must use the Supabase **service_role** key. Auth is the app's own JWT, not Supabase Auth, so `auth.uid()` is always NULL and RLS would silently return zero rows with the anon key. Because RLS is effectively bypassed, every query must filter by `user_id` explicitly.
@@ -40,6 +40,8 @@ The backend must use the Supabase **service_role** key. Auth is the app's own JW
 Schema lives in `backend-node/src/supabase/schema.sql` (README says `supabase/schema.sql` at the root — that path is stale). It is applied manually in the Supabase SQL editor; there is no migration tooling. Key pieces:
 - `transactions.embedding vector(768)` with an HNSW index
 - `match_transactions(p_user_id, p_query_embedding, p_match_count, p_min_score)` RPC — cosine-similarity search scoped to a user
+- `transactions.source` (`manual` | `demo` | `plaid`) + `external_id`, unique per `(user_id, source, external_id)` — this is what makes re-imports idempotent. The migration for existing DBs is commented at the bottom of `schema.sql`.
+- `plaid_items` holds one row per linked bank: encrypted access token + `/transactions/sync` cursor.
 - `messages` is a separate table; a trigger bumps `conversations.updated_at` on insert. Delete cascades from conversations to messages.
 
 `src/models/*.js` map snake_case rows to a camelCase shape with `_id` (a holdover from the earlier MongoDB version). The frontend and the prompt builder depend on that shape (`_id`, `userId`, `isSuspicious`), so keep the mapping when adding queries. Note `retrieveContext.js` does its own mapping of RPC rows.
@@ -58,12 +60,19 @@ SSE event order the frontend (`app/(root)/ai-assistant/page.tsx`) relies on: `{c
 
 The embedding text format in `utils/ingestTransactions.js` determines retrieval quality; changing it requires re-running ingest for all rows.
 
+## Transaction imports
+
+All sources go through `services/importTransactions.js` → `importTransactions(userId, source, normalized[])`: validate → flag suspicious (only rows whose source didn't set `isSuspicious`: >4× category median in the batch, or > ₹2,00,000) → upsert with `ignoreDuplicates` → batch-embed the newly inserted rows (`embedTexts`, chunks of 64). Embedding failures don't roll back the insert; the result carries `embedError`. Add new sources as adapters that produce the normalized shape `{externalId, amount, type, category, merchant, name, timestamp, isSuspicious?}`.
+- Demo: `services/demoData.js`, a seeded generator (personas `student` / `young_professional` / `family`). `POST /api/transactions/demo`, `DELETE /api/transactions?source=demo`.
+- Plaid Sandbox: `services/plaid.js` + `routes/plaidRoutes.js`; frontend `components/transactions/AddDataMenu.tsx` uses `react-plaid-link`. Only `added` from `/transactions/sync` is applied (`modified` / `removed` are a TODO). USD amounts are multiplied by `USD_TO_INR`. Sandbox Link login: `user_transactions_dynamic`.
+- `buildEmbeddingText` in `utils/ingestTransactions.js` is shared by the script and the pipeline — keep it the single source of the embedding format.
+
 ## Auth
 
 - Backend: `/api/auth/signup` and `/api/auth/signin` issue a JWT; `middleware/authMiddleware.js` (`protect`) verifies `Authorization: Bearer <token>` and sets `req.user`.
 - Frontend: NextAuth Credentials provider (`app/api/auth/[...nextauth]/route.ts`) calls the backend sign-in and stores the backend JWT as `session.accessToken`; user id is `session.user._id`. Pages call the backend directly with `fetch` + that bearer token.
 - `frontend/proxy.ts` is the Next.js 16 middleware (renamed from `middleware.ts`) handling auth redirects; new protected routes must be added to its `matcher`.
-- `/api/chat` and `/api/transactions` use `protect`. `/api/conversations/*` does **not** — it trusts a `userId` from the query/body.
+- `/api/chat`, `/api/transactions` and `/api/plaid` use `protect`. `/api/conversations/*` does **not** — it trusts a `userId` from the query/body.
 
 ## Gotchas
 
