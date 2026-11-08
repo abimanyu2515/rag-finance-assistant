@@ -1,6 +1,7 @@
 'use client'
 
-import { LogOut } from 'lucide-react'
+import { LogOut, Menu } from 'lucide-react'
+import { useSidebar } from '@/contexts/SidebarContext'
 import { signOut, useSession } from 'next-auth/react'
 import ThemeToggle from '@/components/ThemeToggle'
 import {
@@ -11,12 +12,23 @@ const CustomHeader = ({title}: {title: string}) => {
   const { data: session } = useSession()
   const name = session?.user?.name
   const email = session?.user?.email
+  const { setIsDrawerOpen } = useSidebar()
 
   return (
-    <div className='flex w-full items-center justify-between mx-6 lg:mx-10'>
-        <h1 className='text-3xl font-semibold'>{title}</h1>
+    <div className='flex w-full min-w-0 items-center justify-between gap-3 px-4 sm:px-6 lg:px-10'>
+        <div className='flex min-w-0 items-center gap-2'>
+            {/* Phones only: the sidebar is hidden, so open it as a drawer */}
+            <button
+              onClick={() => setIsDrawerOpen(true)}
+              className='md:hidden -ml-2 size-10 shrink-0 flex items-center justify-center rounded-lg text-ink-2 hover:bg-control cursor-pointer'
+              aria-label='Open menu'
+            >
+              <Menu size={22} />
+            </button>
+            <h1 className='text-xl sm:text-2xl lg:text-3xl font-semibold truncate'>{title}</h1>
+        </div>
 
-        <div className='flex items-center gap-3'>
+        <div className='flex shrink-0 items-center gap-2 sm:gap-3'>
             <ThemeToggle />
 
             <DropdownMenu>

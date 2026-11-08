@@ -10,16 +10,19 @@ type Props = {
 
 const TransactionsTable = ({ transactions, detailed = false, emptyText = 'No transactions in this period' }: Props) => {
   const cols = detailed ? 5 : 4
+  const formatDate = (ts: string) =>
+    new Date(ts).toLocaleDateString('en-US', { month: 'short', day: '2-digit', ...(detailed && { year: 'numeric' }) })
 
   return (
     <div className='overflow-x-auto'>
-      <table className='w-full text-sm min-w-130'>
+      {/* Phones: Date/Category fold under the name; full columns from sm, Status from md */}
+      <table className='w-full text-sm sm:min-w-130'>
         <thead>
           <tr className='text-left'>
             <th className='font-medium pb-3'>Description</th>
-            <th className='font-medium pb-3'>Date</th>
-            <th className='font-medium pb-3'>Category</th>
-            {detailed && <th className='font-medium pb-3'>Status</th>}
+            <th className='hidden sm:table-cell font-medium pb-3'>Date</th>
+            <th className='hidden sm:table-cell font-medium pb-3'>Category</th>
+            {detailed && <th className='hidden md:table-cell font-medium pb-3'>Status</th>}
             <th className='font-medium pb-3 text-right'>Amount</th>
           </tr>
         </thead>
@@ -42,20 +45,25 @@ const TransactionsTable = ({ transactions, detailed = false, emptyText = 'No tra
                     >
                       {initials(name)}
                     </span>
-                    <span className='text-ink-2'>{name}</span>
-                    {!detailed && tx.isSuspicious && (
-                      <span className='text-[10px] text-neg bg-neg/10 rounded px-1.5 py-0.5'>Suspicious</span>
-                    )}
+                    <div className='min-w-0'>
+                      <div className='flex flex-wrap items-center gap-x-2 gap-y-1'>
+                        <span className='text-ink-2 wrap-break-word'>{name}</span>
+                        {tx.isSuspicious && (
+                          <span className={`text-[10px] text-neg bg-neg/10 rounded px-1.5 py-0.5 ${detailed ? 'md:hidden' : ''}`}>
+                            Suspicious
+                          </span>
+                        )}
+                      </div>
+                      <p className='sm:hidden text-xs text-ink-subtle mt-0.5'>
+                        {formatDate(tx.timestamp)}{tx.category ? ` · ${tx.category}` : ''}
+                      </p>
+                    </div>
                   </div>
                 </td>
-                <td className='py-3'>
-                  {new Date(tx.timestamp).toLocaleDateString('en-US', {
-                    month: 'short', day: '2-digit', ...(detailed && { year: 'numeric' }),
-                  })}
-                </td>
-                <td className='py-3'>{tx.category || '—'}</td>
+                <td className='hidden sm:table-cell py-3 whitespace-nowrap pr-3'>{formatDate(tx.timestamp)}</td>
+                <td className='hidden sm:table-cell py-3 pr-3'>{tx.category || '—'}</td>
                 {detailed && (
-                  <td className='py-3'>
+                  <td className='hidden md:table-cell py-3'>
                     <span className={`text-xs rounded px-2 py-0.5 ${
                       tx.isSuspicious ? 'text-neg bg-neg/10' : 'text-pos bg-pos/10'
                     }`}>
@@ -63,7 +71,7 @@ const TransactionsTable = ({ transactions, detailed = false, emptyText = 'No tra
                     </span>
                   </td>
                 )}
-                <td className={`py-3 text-right ${isCredit ? 'text-pos' : 'text-ink-2'}`}>
+                <td className={`py-3 pl-3 text-right whitespace-nowrap align-top sm:align-middle ${isCredit ? 'text-pos' : 'text-ink-2'}`}>
                   {isCredit ? '+' : '-'}{fmt(tx.amount)}
                 </td>
               </tr>

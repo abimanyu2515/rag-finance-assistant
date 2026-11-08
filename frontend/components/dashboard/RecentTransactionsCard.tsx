@@ -6,9 +6,10 @@ type Props = {
   transactions: Transaction[]
   rangeLabel: string
   className?: string
+  emptyText?: string
 }
 
-const RecentTransactionsCard = ({ transactions, rangeLabel, className }: Props) => {
+const RecentTransactionsCard = ({ transactions, rangeLabel, className, emptyText }: Props) => {
   return (
     <DashboardCard
       title='Recent Transactions'
@@ -17,7 +18,7 @@ const RecentTransactionsCard = ({ transactions, rangeLabel, className }: Props) 
       className={className}
     >
       <div className='mt-6'>
-        <TransactionsTable transactions={transactions.slice(0, 6)} />
+        <TransactionsTable transactions={transactions.slice(0, 6)} emptyText={emptyText} />
       </div>
     </DashboardCard>
   )

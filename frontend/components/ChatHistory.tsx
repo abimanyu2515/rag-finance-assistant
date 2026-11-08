@@ -2,10 +2,10 @@
 
 import { ChatHistoryProps } from '@/types/chat'
 import { Plus, Trash2 } from 'lucide-react';
-import { useState } from 'react'
+import { useConfirm } from '@/components/ConfirmDialog'
 
 const ChatHistory = ({ conversations, currentConversationId, onSelectConversation, onNewChat, onDeleteConversation, isLoading }: ChatHistoryProps) => {
-  const [hoverId, setHoverId] = useState<string | null>(null);
+  const confirm = useConfirm();
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
@@ -36,8 +36,6 @@ const ChatHistory = ({ conversations, currentConversationId, onSelectConversatio
                           ? 'bg-control'
                           : 'hover:bg-control'
                       }`}
-                      onMouseEnter={() => setHoverId(conv._id)}
-                      onMouseLeave={() => setHoverId(null)}
                     >
                         <button
                           onClick={() => onSelectConversation(conv._id)}
@@ -53,20 +51,23 @@ const ChatHistory = ({ conversations, currentConversationId, onSelectConversatio
                             )}
                         </button>
 
-                        {hoverId === conv._id && (
-                            <button
-                              onClick={(e) => {
+                        {/* Always visible on touch screens; revealed on hover/focus where hover exists */}
+                        <button
+                              onClick={async (e) => {
                                 e.stopPropagation()
-                                if (confirm('Delete this convo.?')) {
-                                    onDeleteConversation(conv._id)
-                                }
+                                const ok = await confirm({
+                                  title: 'Delete this conversation?',
+                                  description: `“${conv.title}” and all its messages will be permanently deleted.`,
+                                  confirmLabel: 'Delete',
+                                  destructive: true,
+                                })
+                                if (ok) onDeleteConversation(conv._id)
                               }}
-                              className='absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-md text-ink-subtle hover:text-neg hover:bg-neg/10 transition-colors cursor-pointer'
-                              aria-label='Delete Conversation'
+                              className='absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-md text-ink-subtle hover:text-neg hover:bg-neg/10 transition-[color,background-color,opacity] cursor-pointer [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus-visible:opacity-100'
+                              aria-label={`Delete conversation ${conv.title || ''}`.trim()}
                             >
                               <Trash2 className='w-3.5 h-3.5' />
                             </button>
-                        )}
                     </div>
                 ))}
             </div>

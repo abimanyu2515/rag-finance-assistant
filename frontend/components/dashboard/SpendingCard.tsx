@@ -21,15 +21,20 @@ const SpendingCard = ({ transactions, rangeLabel, previousSpend }: Props) => {
   const debits = transactions.filter(t => t.type === 'debit')
   const total = debits.reduce((s, t) => s + t.amount, 0)
 
-  // Category share of total spend: top 4 categories, the rest folded into "Other"
+  // Category share of total spend: top 4 categories, the rest folded into "Other".
+  // "Other" is reserved for that folded bucket: missing categories show as
+  // "Uncategorized", and a stored category literally named "Other" (e.g. older
+  // Plaid imports) goes into the bucket, so legend keys stay unique.
   const catMap: Record<string, number> = {}
+  let storedOther = 0
   debits.forEach(t => {
-    const cat = t.category || 'Other'
-    catMap[cat] = (catMap[cat] || 0) + t.amount
+    const cat = t.category?.trim() || 'Uncategorized'
+    if (cat.toLowerCase() === 'other') storedOther += t.amount
+    else catMap[cat] = (catMap[cat] || 0) + t.amount
   })
   const sorted = Object.entries(catMap).sort((a, b) => b[1] - a[1])
   const top = sorted.slice(0, 4)
-  const rest = sorted.slice(4).reduce((s, [, v]) => s + v, 0)
+  const rest = sorted.slice(4).reduce((s, [, v]) => s + v, 0) + storedOther
   const categoryData = [
     ...top.map(([name, value], i) => ({ name, value, color: SLICE_COLORS[i] })),
     ...(rest > 0 ? [{ name: 'Other', value: rest, color: OTHER_COLOR }] : []),

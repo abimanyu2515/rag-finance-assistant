@@ -10,7 +10,7 @@ type DashboardCardProps = {
 
 const DashboardCard = ({ title, subtitle, action, className = '', children }: DashboardCardProps) => {
   return (
-    <section className={`bg-panel border border-line-soft rounded-2xl p-6 flex flex-col ${className}`}>
+    <section className={`bg-panel border border-line-soft rounded-2xl p-4 sm:p-6 flex flex-col min-w-0 ${className}`}>
       <div className='flex items-start justify-between gap-4'>
         <div>
           <h2 className='text-xl font-medium'>{title}</h2>

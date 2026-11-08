@@ -14,8 +14,8 @@ type Props = {
 
 const RangeSelect = ({ value, onChange, label }: Props) => {
   return (
-    <div className='flex items-center gap-4'>
-      <span className='text-sm text-ink-muted'>Showing data:</span>
+    <div className='flex items-center gap-3 sm:gap-4'>
+      <span className='hidden sm:inline text-sm text-ink-muted'>Showing data:</span>
       <DropdownMenu>
         <DropdownMenuTrigger className='flex items-center gap-4 bg-panel border border-line hover:border-line-strong rounded-lg px-4 py-2.5 text-sm cursor-pointer transition-colors'>
           {label}

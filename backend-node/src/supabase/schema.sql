@@ -41,7 +41,14 @@ create table if not exists public.transactions (
   -- no more mongoId <-> Qdrant point-id cross-referencing.
   embedding     vector(768),
 
-  created_at    timestamptz not null default now()
+  -- Where the row came from and its id in that source, so re-imports
+  -- (demo reload, Plaid re-sync) are idempotent.
+  source        text not null default 'manual' check (source in ('manual', 'demo', 'plaid')),
+  external_id   text,
+
+  created_at    timestamptz not null default now(),
+
+  constraint uq_transactions_source_external unique (user_id, source, external_id)
 );
 
 create index if not exists idx_transactions_user_id on public.transactions (user_id);
@@ -53,6 +60,22 @@ create index if not exists idx_transactions_user_timestamp on public.transaction
 create index if not exists idx_transactions_embedding
   on public.transactions
   using hnsw (embedding vector_cosine_ops);
+
+
+-- 3b. Plaid items (one row per linked bank connection) -----------------------
+-- access_token_enc is AES-256-GCM ciphertext (see services/plaid.js); the
+-- plaintext Plaid access token is never stored.
+create table if not exists public.plaid_items (
+  id                uuid primary key default gen_random_uuid(),
+  user_id           uuid not null references public.users(id) on delete cascade,
+  item_id           text not null unique,
+  access_token_enc  text not null,
+  institution_name  text,
+  sync_cursor       text,
+  created_at        timestamptz not null default now()
+);
+
+create index if not exists idx_plaid_items_user_id on public.plaid_items (user_id);
 
 
 -- 4. Conversations -----------------------------------------------------------
@@ -160,6 +183,7 @@ alter table public.users enable row level security;
 alter table public.transactions enable row level security;
 alter table public.conversations enable row level security;
 alter table public.messages enable row level security;
+alter table public.plaid_items enable row level security;
 
 -- Service role bypasses RLS by default in Supabase, so no explicit policy
 -- is required for the backend to function. The policies below are useful
@@ -181,3 +205,21 @@ create policy "Users can view their own messages"
       select id from public.conversations where user_id = auth.uid()
     )
   );
+
+
+-- ============================================================================
+-- Migration for databases created before transaction imports existed.
+-- Paste into the Supabase SQL editor once; safe to re-run.
+-- ============================================================================
+-- alter table public.transactions
+--   add column if not exists source text not null default 'manual'
+--     check (source in ('manual', 'demo', 'plaid')),
+--   add column if not exists external_id text;
+--
+-- alter table public.transactions
+--   drop constraint if exists uq_transactions_source_external;
+-- alter table public.transactions
+--   add constraint uq_transactions_source_external unique (user_id, source, external_id);
+--
+-- (then run section 3b above to create public.plaid_items, and
+--  `alter table public.plaid_items enable row level security;`)
