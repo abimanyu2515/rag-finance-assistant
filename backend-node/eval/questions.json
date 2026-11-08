@@ -1,0 +1,144 @@
+{
+  "_readme": "Eval set for scripts/evalChat.js. Written for the young_professional demo persona (6 months). {{placeholders}} are resolved to IST dates at run time. truth = a tool call whose result is the ground truth. expect.numbers / expect.texts = paths into that result that must appear in the answer (arr[key=value] picks an item, arr[0] by index). No expect = graded by hand.",
+  "questions": [
+    {
+      "id": 1,
+      "kind": "total",
+      "question": "How much did I spend in total last month?",
+      "truth": { "tool": "totals_for_range", "args": { "from": "{{last_month_start}}", "to": "{{last_month_end}}" } },
+      "expect": { "numbers": ["total_debit"] }
+    },
+    {
+      "id": 2,
+      "kind": "total",
+      "question": "How much money came in last month?",
+      "truth": { "tool": "totals_for_range", "args": { "from": "{{last_month_start}}", "to": "{{last_month_end}}" } },
+      "expect": { "numbers": ["total_credit"] }
+    },
+    {
+      "id": 3,
+      "kind": "total",
+      "question": "What was my net savings last month (income minus spending)?",
+      "truth": { "tool": "totals_for_range", "args": { "from": "{{last_month_start}}", "to": "{{last_month_end}}" } },
+      "expect": { "numbers": ["net"] }
+    },
+    {
+      "id": 4,
+      "kind": "category",
+      "question": "How much did I spend on food last month?",
+      "truth": { "tool": "spend_by_category", "args": { "from": "{{last_month_start}}", "to": "{{last_month_end}}" } },
+      "expect": { "numbers": ["categories[category=Food].total"] }
+    },
+    {
+      "id": 5,
+      "kind": "category",
+      "question": "How much have I spent on groceries this month?",
+      "truth": { "tool": "spend_by_category", "args": { "from": "{{this_month_start}}", "to": "{{today}}" } },
+      "expect": { "numbers": ["categories[category=Groceries].total"] }
+    },
+    {
+      "id": 6,
+      "kind": "category",
+      "question": "Which category did I spend the most on last month, and how much?",
+      "truth": { "tool": "spend_by_category", "args": { "from": "{{last_month_start}}", "to": "{{last_month_end}}" } },
+      "expect": { "texts": ["categories[0].category"], "numbers": ["categories[0].total"] }
+    },
+    {
+      "id": 7,
+      "kind": "merchant",
+      "question": "Who are the top 3 merchants I spent the most at in the last 30 days?",
+      "truth": { "tool": "top_merchants", "args": { "from": "{{last_30_start}}", "to": "{{today}}", "limit": 3 } },
+      "expect": { "texts": ["merchants[0].merchant", "merchants[1].merchant", "merchants[2].merchant"] }
+    },
+    {
+      "id": 8,
+      "kind": "merchant",
+      "question": "Which shopping site did I spend the most on this year?",
+      "truth": { "tool": "top_merchants", "args": { "from": "{{year_start}}", "to": "{{today}}", "category": "Shopping", "limit": 1 } },
+      "expect": { "texts": ["merchants[0].merchant"] }
+    },
+    {
+      "id": 9,
+      "kind": "compare",
+      "question": "Compare my total spending last month with the month before.",
+      "truth": { "tool": "compare_periods", "args": { "a_from": "{{prev_month_start}}", "a_to": "{{prev_month_end}}", "b_from": "{{last_month_start}}", "b_to": "{{last_month_end}}" } },
+      "expect": { "numbers": ["period_a.total", "period_b.total"] }
+    },
+    {
+      "id": 10,
+      "kind": "compare",
+      "question": "Did my transport spending go up or down last month compared to the month before? Give both amounts.",
+      "truth": { "tool": "compare_periods", "args": { "a_from": "{{prev_month_start}}", "a_to": "{{prev_month_end}}", "b_from": "{{last_month_start}}", "b_to": "{{last_month_end}}", "group_by": "category" } },
+      "expect": { "numbers": ["by_category[category=Transport].a", "by_category[category=Transport].b"] }
+    },
+    {
+      "id": 11,
+      "kind": "list",
+      "question": "Show my last 5 transactions.",
+      "truth": { "tool": "list_transactions", "args": { "sort": "newest", "limit": 5 } },
+      "expect": { "texts": ["transactions[0].merchant"], "numbers": ["transactions[0].amount"] }
+    },
+    {
+      "id": 12,
+      "kind": "list",
+      "question": "What was my very first transaction?",
+      "truth": { "tool": "list_transactions", "args": { "sort": "oldest", "limit": 1 } },
+      "expect": { "texts": ["transactions[0].merchant"], "numbers": ["transactions[0].amount"] }
+    },
+    {
+      "id": 13,
+      "kind": "list",
+      "question": "What is the single largest expense I have ever made?",
+      "truth": { "tool": "list_transactions", "args": { "type": "debit", "sort": "largest", "limit": 1 } },
+      "expect": { "numbers": ["transactions[0].amount"] }
+    },
+    {
+      "id": 14,
+      "kind": "list",
+      "question": "What was my biggest purchase on Amazon?",
+      "truth": { "tool": "list_transactions", "args": { "type": "debit", "merchant": "Amazon", "sort": "largest", "limit": 1 } },
+      "expect": { "numbers": ["transactions[0].amount"] }
+    },
+    {
+      "id": 15,
+      "kind": "suspicious",
+      "question": "Do I have any suspicious transactions? List them.",
+      "truth": { "tool": "list_transactions", "args": { "suspicious_only": true, "limit": 50 } },
+      "expect": { "texts": ["transactions[0].merchant"], "numbers": ["transactions[0].amount"] }
+    },
+    {
+      "id": 16,
+      "kind": "list",
+      "question": "How much do I pay for Netflix?",
+      "truth": { "tool": "list_transactions", "args": { "merchant": "Netflix", "limit": 1 } },
+      "expect": { "numbers": ["transactions[0].amount"] }
+    },
+    {
+      "id": 17,
+      "kind": "list",
+      "question": "How many times did I order from Swiggy last month?",
+      "truth": { "tool": "list_transactions", "args": { "merchant": "Swiggy", "from": "{{last_month_start}}", "to": "{{last_month_end}}", "limit": 50 } },
+      "expect": { "numbers": ["matching_count"] }
+    },
+    {
+      "id": 18,
+      "kind": "trend",
+      "question": "Which month this year did I spend the most money in?",
+      "truth": { "tool": "monthly_totals", "args": { "from": "{{year_start}}", "to": "{{today}}" } }
+    },
+    {
+      "id": 19,
+      "kind": "semantic",
+      "question": "Am I paying for any streaming services?",
+      "truth": { "tool": "list_transactions", "args": { "category": "Subscriptions", "limit": 50 } },
+      "expect": { "texts": ["transactions[0].merchant"] }
+    },
+    {
+      "id": 20,
+      "kind": "semantic",
+      "question": "How much have I paid for electricity this year?",
+      "truth": { "tool": "top_merchants", "args": { "from": "{{year_start}}", "to": "{{today}}", "category": "Bills", "limit": 20 } },
+      "expect": { "numbers": ["merchants[merchant=BESCOM Electricity].total"] }
+    }
+  ]
+}

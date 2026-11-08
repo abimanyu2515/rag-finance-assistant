@@ -172,6 +172,52 @@ as $$
 $$;
 
 
+-- 7b. Aggregation RPC for the chat tools (utils/financeTools.js) --------------
+-- Sums amounts for one user over [p_from, p_to), optionally grouped by
+-- category / merchant / month. Runs in Postgres so totals cover every row,
+-- not just the latest 100 the summary sees (and dodge PostgREST's row cap).
+-- Null filters are ignored. Category / merchant match case-insensitively
+-- (merchant is a substring match).
+create or replace function public.transaction_stats(
+  p_user_id  uuid,
+  p_from     timestamptz default null,
+  p_to       timestamptz default null,
+  p_group_by text default 'none',   -- none | category | merchant | month
+  p_type     text default null,     -- credit | debit | null (both)
+  p_category text default null,
+  p_merchant text default null
+)
+returns table (
+  group_key text,
+  type      text,
+  total     numeric,
+  txn_count bigint
+)
+language sql
+stable
+as $$
+  select
+    case p_group_by
+      when 'category' then coalesce(t.category, 'Uncategorized')
+      when 'merchant' then coalesce(t.merchant, 'Unknown')
+      when 'month'    then to_char(t."timestamp" at time zone 'Asia/Kolkata', 'YYYY-MM')
+      else 'all'
+    end as group_key,
+    t.type,
+    sum(t.amount) as total,
+    count(*)      as txn_count
+  from public.transactions t
+  where t.user_id = p_user_id
+    and (p_from is null or t."timestamp" >= p_from)
+    and (p_to   is null or t."timestamp" <  p_to)
+    and (p_type is null or t.type = p_type)
+    and (p_category is null or lower(t.category) = lower(p_category))
+    and (p_merchant is null or t.merchant ilike '%' || p_merchant || '%')
+  group by 1, 2
+  order by 3 desc;
+$$;
+
+
 -- 8. Row Level Security --------------------------------------------------------
 -- Since the backend uses the Supabase service-role key (server-side, trusted),
 -- RLS is a defense-in-depth layer, not the primary access control — the

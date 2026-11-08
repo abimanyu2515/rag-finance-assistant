@@ -19,6 +19,7 @@ const Chatbot = () => {
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState<string | undefined>(undefined);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
 
   const loadConversation = async (conversationId: string) => {
@@ -50,6 +51,7 @@ const Chatbot = () => {
   const handleSend = async (userMessage: Message) => {
     if (!USER_ID || !ACCESS_TOKEN) return;
     setLoading(true)
+    setStatus(undefined)
 
     const aiMessageId = (Date.now() + 1).toString();
     setMessages(prev => [
@@ -97,6 +99,10 @@ const Chatbot = () => {
             if (parsed.conversationId) {
               setCurrentConversationId(parsed.conversationId);
             }
+            // Tool progress label, shown in the typing indicator until the first token
+            if (parsed.status) {
+              setStatus(String(parsed.status))
+            }
             if (parsed.token) {
               setMessages(prev => prev.map(msg => msg.id === aiMessageId ? 
                 {...msg, content: msg.content + parsed.token} : msg
@@ -123,6 +129,7 @@ const Chatbot = () => {
       toast.error('Couldn’t get a response', { description: 'Check that the backend is running and try again.' })
     } finally {
       setLoading(false)
+      setStatus(undefined)
     }
   }
 
@@ -174,6 +181,7 @@ const Chatbot = () => {
       <MessageList
         messages={messages}
         isLoading={loading}
+        status={status}
         initial={initial ?? undefined}
         onSuggestion={handleSendMessage}
       />

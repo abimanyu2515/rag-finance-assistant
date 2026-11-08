@@ -17,6 +17,18 @@ export const findUserByEmail = async (email) => {
   return data; // null if not found
 };
 
+// Display name for the chat prompt; null if the user row is missing.
+export const findUserNameById = async (id) => {
+  const { data, error } = await supabase
+    .from("users")
+    .select("name")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data?.name ?? null;
+};
+
 export const createUser = async ({ name, email, password }) => {
   const { data, error } = await supabase
     .from("users")

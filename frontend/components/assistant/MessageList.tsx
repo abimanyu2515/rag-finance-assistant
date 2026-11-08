@@ -14,10 +14,11 @@ const SUGGESTIONS = [
 
 type Props = MessageListProps & {
   initial?: string
+  status?: string
   onSuggestion?: (prompt: string) => void
 }
 
-const MessageList = ({ messages, isLoading = false, initial, onSuggestion }: Props) => {
+const MessageList = ({ messages, isLoading = false, initial, status, onSuggestion }: Props) => {
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const scrollToBottom = () => {
@@ -64,7 +65,7 @@ const MessageList = ({ messages, isLoading = false, initial, onSuggestion }: Pro
             {visibleMessages.map((message) => (
               <MessageBubble key={message.id} message={message} initial={initial} />
             ))}
-            {awaitingFirstToken && <TypingIndicator />}
+            {awaitingFirstToken && <TypingIndicator status={status} />}
           </>
         )}
         <div ref={messagesEndRef} />
