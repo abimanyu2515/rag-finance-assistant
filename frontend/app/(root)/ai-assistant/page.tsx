@@ -1,12 +1,14 @@
 'use client'
 
 import PageShell from '@/components/PageShell'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ConversationDetail, Message } from '@/types/chat'
 import MessageList from '@/components/assistant/MessageList'
 import ChatInput from '@/components/assistant/ChatInput'
 import { useSession } from 'next-auth/react'
 import { toast } from 'sonner'
+import type { SpeakState } from '@/components/assistant/MessageBubble'
+import { fetchVoiceEnabled, speakText, useVoiceLanguage } from '@/lib/voice'
 
 const API_BASE_URL = `${process.env.NEXT_PUBLIC_BACKEND_URL}/api`
 
@@ -21,6 +23,53 @@ const Chatbot = () => {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string | undefined>(undefined);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
+
+  // ───── Voice (Sarvam): mic input + read-aloud, hidden when the backend has no key ─────
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [voiceLanguage, setVoiceLanguage] = useVoiceLanguage();
+  const [speaking, setSpeaking] = useState<{ id: string; state: SpeakState } | null>(null);
+  const audioRef = useRef<{ audio: HTMLAudioElement; url: string } | null>(null);
+
+  useEffect(() => {
+    if (!ACCESS_TOKEN) return;
+    let cancelled = false;
+    fetchVoiceEnabled(ACCESS_TOKEN).then(enabled => { if (!cancelled) setVoiceEnabled(enabled) });
+    return () => { cancelled = true };
+  }, [ACCESS_TOKEN]);
+
+  const stopAudio = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.audio.pause();
+      URL.revokeObjectURL(audioRef.current.url);
+      audioRef.current = null;
+    }
+    setSpeaking(null);
+  }, []);
+
+  useEffect(() => stopAudio, [stopAudio]);
+
+  const handleSpeak = async (message: Message) => {
+    if (!ACCESS_TOKEN) return;
+    const wasThis = speaking?.id === message.id;
+    stopAudio();
+    if (wasThis) return; // second click stops
+
+    // Old messages have no language: use the picker, or English on Auto
+    const language = message.language ?? (voiceLanguage === 'auto' ? 'en-IN' : voiceLanguage);
+    setSpeaking({ id: message.id, state: 'loading' });
+    try {
+      const blob = await speakText(message.content, language, ACCESS_TOKEN);
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audioRef.current = { audio, url };
+      audio.onended = () => { if (audioRef.current?.audio === audio) stopAudio() };
+      await audio.play();
+      setSpeaking(cur => (cur?.id === message.id ? { id: message.id, state: 'playing' } : cur));
+    } catch (e) {
+      stopAudio();
+      toast.error('Couldn’t read that aloud', { description: e instanceof Error ? e.message : 'Please try again.' });
+    }
+  };
 
   const loadConversation = async (conversationId: string) => {
     if (!USER_ID) return;
@@ -48,7 +97,7 @@ const Chatbot = () => {
   const dropIfEmpty = (id: string) =>
     setMessages(prev => prev.filter(msg => msg.id !== id || msg.content.trim() !== ''))
 
-  const handleSend = async (userMessage: Message) => {
+  const handleSend = async (userMessage: Message, language?: string) => {
     if (!USER_ID || !ACCESS_TOKEN) return;
     setLoading(true)
     setStatus(undefined)
@@ -60,7 +109,8 @@ const Chatbot = () => {
         id: aiMessageId,
         role: 'assistant',
         content: '',
-        created_at: new Date()
+        created_at: new Date(),
+        language,
       },
     ])
     
@@ -74,7 +124,8 @@ const Chatbot = () => {
         body: JSON.stringify({
           message: userMessage.content,
           userId: USER_ID,
-          conversationId: currentConversationId
+          conversationId: currentConversationId,
+          language,
         })
       })
 
@@ -152,6 +203,7 @@ const Chatbot = () => {
     };
 
     const handleNewConversation = () => {
+      stopAudio();
       setCurrentConversationId(null);
       setMessages([]);
     };
@@ -163,17 +215,18 @@ const Chatbot = () => {
       window.removeEventListener('ai-chat:select-conversation', handleSelectConversation as EventListener);
       window.removeEventListener('ai-chat:new-conversation', handleNewConversation);
     };
-  }, [USER_ID]);
+  }, [USER_ID, stopAudio]);
 
-  const handleSendMessage = (content: string) => {
+  const handleSendMessage = (content: string, language?: string) => {
     const newMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
       content,
-      created_at: new Date()
+      created_at: new Date(),
+      language,
     }
     setMessages(prev => [...prev, newMessage])
-    handleSend(newMessage)
+    handleSend(newMessage, language)
   }
 
   return (
@@ -183,9 +236,18 @@ const Chatbot = () => {
         isLoading={loading}
         status={status}
         initial={initial ?? undefined}
-        onSuggestion={handleSendMessage}
+        onSuggestion={(prompt) => handleSendMessage(prompt)}
+        onSpeak={voiceEnabled ? handleSpeak : undefined}
+        speaking={speaking}
       />
-      <ChatInput onSendMessage={handleSendMessage} disabled={loading} />
+      <ChatInput
+        onSendMessage={handleSendMessage}
+        disabled={loading}
+        voiceEnabled={voiceEnabled}
+        voiceLanguage={voiceLanguage}
+        onVoiceLanguageChange={setVoiceLanguage}
+        accessToken={ACCESS_TOKEN}
+      />
     </PageShell>
   )
 }

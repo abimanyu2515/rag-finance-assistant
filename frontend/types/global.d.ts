@@ -1,5 +1,6 @@
 import { RegisterOptions } from "module";
 import type { LucideIcon } from "lucide-react";
+import type { VoiceLanguage } from "@/lib/voice";
 
 declare global {
     type NavItem = {
@@ -32,8 +33,13 @@ declare global {
     }
 
     type ChatInputProps = {
-        onSendMessage: (message: string) => void
+        /** language: reply language code from voice input (e.g. "ta-IN"), undefined for typed text on Auto */
+        onSendMessage: (message: string, language?: string) => void
         disabled?: boolean
+        voiceEnabled?: boolean
+        voiceLanguage?: VoiceLanguage
+        onVoiceLanguageChange?: (language: VoiceLanguage) => void
+        accessToken?: string
     }
 
     type MessageListProps = {

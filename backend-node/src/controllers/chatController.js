@@ -4,6 +4,7 @@ import {
   addMessage,
 } from "../models/Conversations.js";
 import { runChat } from "../services/chatAgent.js";
+import { isSupportedLanguage } from "../services/sarvam.js";
 
 // SSE event order (frontend app/(root)/ai-assistant/page.tsx relies on it):
 //   {conversationId} → {status}* → {token}* → {done} → {saved};  {error} on failure.
@@ -13,6 +14,8 @@ export const chatWithAI = async (req, res) => {
   // Only the verified JWT decides whose data the tools can read.
   const userId = req.user?.id;
   const { message, conversationId } = req.body;
+  // Optional reply language from voice input (e.g. "ta-IN"); anything unknown is ignored.
+  const language = isSupportedLanguage(req.body.language) ? req.body.language : undefined;
 
   if (!userId || !message) {
     return res.status(400).json({ error: "User ID and message are required" });
@@ -53,6 +56,7 @@ export const chatWithAI = async (req, res) => {
       userId,
       message,
       history: recentHistory,
+      language,
       mode: process.env.CHAT_MODE === "rag" ? "rag" : "tools",
       onToken: (token) => send(res, { token }),
       onStatus: (status) => send(res, { status }),

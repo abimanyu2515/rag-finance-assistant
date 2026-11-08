@@ -116,10 +116,10 @@ const grade = (answer, truth, expect) => {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-const ask = async (userId, question, mode) => {
+const ask = async (userId, question, mode, language) => {
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      return await runChat({ userId, message: question, history: [], mode });
+      return await runChat({ userId, message: question, history: [], mode, language });
     } catch (err) {
       if (err?.status === 429 && attempt === 0) {
         console.log("  rate limited, waiting 20s…");
@@ -149,7 +149,7 @@ const main = async () => {
 
     for (const mode of modes) {
       process.stdout.write(`Q${q.id} [${mode}] ${q.question} … `);
-      const out = await ask(user.id, q.question, mode);
+      const out = await ask(user.id, q.question, mode, q.language);
       const g = out.error ? { verdict: "error", missing: [out.error] } : grade(out.reply, truth, q.expect);
       row.results[mode] = { ...out, ...g };
       console.log(g.verdict);

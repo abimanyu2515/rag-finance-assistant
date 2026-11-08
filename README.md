@@ -1,443 +1,479 @@
 # 💰 RAG Finance Assistant
 
-- A full-stack personal finance web application powered by a **Retrieval-Augmented Generation (RAG)** AI chatbot built with modern web technologies. The platform enables users to manage and analyze their personal financial data through an intuitive dashboard, detailed transaction views, and an intelligent AI assistant.
-- Users can sign up, securely authenticate via **JWT-based authentication**, and interact with their financial records in real time. All application data — users, transactions, conversations, messages — lives in a single **Supabase (Postgres)** database. Every transaction is embedded into a **768-dimensional vector** using the **nomic-embed-text** model running locally on **Ollama**, and that vector is stored directly on the transaction row using the **pgvector** extension — no separate vector database required.
-- When a user asks the AI assistant a question, the system detects intent — distinguishing between temporal queries (e.g., "last 5 transactions") and semantic queries (e.g., "spending at Amazon"). For semantic queries, the user's question is embedded and matched against stored vectors via a Postgres RPC function (`match_transactions`) using cosine similarity, retrieving the most relevant transactions as context.
-- A comprehensive financial summary (total credits, debits, balance, category breakdowns) is dynamically generated and combined with retrieved context to build a rich prompt for the LLM.
-- The prompt is sent to a locally hosted **qwen2.5:7b** language model via Ollama, which streams the response token-by-token back to the frontend using **Server-Sent Events (SSE)**.
-- The frontend, built with **Next.js**, **React**, **TypeScript**, and **Tailwind CSS**, renders the AI responses in real time, delivering a seamless and responsive conversational experience.
+A full-stack personal finance web app with an AI assistant that answers questions about **your own transactions**. You can type or speak in English, Hindi, Tamil, Telugu, Kannada or Malayalam.
 
-> **Status note:** Authentication, the Transactions page, conversation history, and the AI Assistant are wired to the live Supabase backend. The Dashboard still renders from local mock/constant data and is not yet connected to the live API.
-
+- **Accounts and data:** users sign up and sign in with the app's own **JWT auth**. Users, transactions, conversations, messages and vector embeddings all live in one **Supabase (Postgres + pgvector)** database.
+- **Getting transactions in:** load a seeded **demo dataset** (student, young professional or family persona) or connect a bank through **Plaid Sandbox**. Every import goes through one pipeline that validates rows, flags suspicious ones, removes duplicates and embeds each row.
+- **Embeddings:** every transaction is embedded into a **768-dimensional vector** with **nomic-embed-text** running locally on **Ollama**. The vector is stored on the transaction row itself (pgvector, HNSW index), so there is no separate vector database.
+- **The assistant (tools mode, default):** the LLM on **Groq** (default `qwen/qwen3.8-27b`) calls **read-only tools**: totals, spend by category, top merchants, monthly totals, period comparisons, transaction lists and semantic search. The tools run real SQL over your data, so amounts and date ranges come from Postgres instead of being guessed by the model. The answer streams token by token over **Server-Sent Events (SSE)**.
+- **RAG mode (baseline):** the original pipeline is still available with `CHAT_MODE=rag`, for comparison. It pastes a financial summary plus the top 8 semantic matches into the prompt.
+- **Voice (optional):** **Sarvam AI** transcribes speech, including Tamil + English mixed speech. The reply comes back in the language you spoke, with ₹ digits, and can be read aloud.
+- **Frontend:** **Next.js 16**, **React 19**, **TypeScript**, **Tailwind CSS v4** and **shadcn/ui**. It has a live dashboard, a transactions page and the chat with conversation history. Light and dark themes are included.
 
 ---
 
-## 🏗️ Architecture Diagram
+## 🏗️ Architecture
 
 ```mermaid
 graph TB
-    subgraph Client["CLIENT LAYER"]
-        Browser["Web Browser"]
-    end
+    Browser["Web Browser"]
 
-    subgraph Frontend["FRONTEND<br/>"]
-
-        Auth["Authentication"]
+    subgraph Frontend["FRONTEND · Next.js 16"]
+        AuthUI["Sign in / Sign up<br/>(NextAuth Credentials)"]
         Dashboard["Dashboard"]
-        Transactions["Transactions"]
-        Assistant["AI Assistant"]
+        TxnPage["Transactions<br/>+ Add data menu"]
+        Assistant["AI Assistant<br/>(SSE chat, mic, read aloud)"]
     end
 
-    subgraph Backend["BACKEND<br/>"]
-        APIGateway["API Gateway"]
-        
-        subgraph Controllers["Controllers"]
-            AuthCtrl["Auth Controller"]
-            ChatCtrl["Chat Controller"]
-            ConvCtrl["Conv Controller"]
-            TxnRoute["Txn Route Handler"]
+    subgraph Backend["BACKEND · Express 5"]
+        JWT["JWT middleware (protect)"]
+
+        subgraph Routes["Routes"]
+            AuthR["/api/auth"]
+            ChatR["/api/chat"]
+            ConvR["/api/conversations"]
+            TxnR["/api/transactions"]
+            PlaidR["/api/plaid"]
+            VoiceR["/api/voice"]
         end
 
-        subgraph RAG["RAG Pipeline"]
-            IntentDetect["Intent Detection"]
-            Embedding["Embedding Service"]
-            VectorSearch["Vector Search"]
-            Summary["Financial Summary"]
-            Prompt["Prompt Builder"]
-            LLMStream["LLM Streaming"]
+        subgraph Chat["Chat agent (services/chatAgent.js)"]
+            Agent["runChat()<br/>tools mode / rag mode"]
+            Tools["Finance tools<br/>(read-only, scoped to user_id)"]
+            RagCtx["RAG baseline<br/>summary + top-8 matches"]
         end
 
-        Middleware["JWT Middleware"]
+        Import["Import pipeline<br/>validate → flag → upsert → embed"]
+        Demo["Demo data generator"]
+        PlaidSvc["Plaid service"]
+        Sarvam["Sarvam service<br/>speech to text / text to speech"]
     end
 
-    subgraph Databases["DATA LAYER"]
-        Supabase[("Supabase (Postgres)<br/>Users · Transactions<br/>Conversations · Messages<br/>+ pgvector embeddings")]
-        Ollama[("Ollama<br/>qwen2.5:7b<br/>nomic-embed")]
+    subgraph External["EXTERNAL SERVICES"]
+        Supabase[("Supabase Postgres + pgvector<br/>users · transactions · conversations<br/>messages · plaid_items")]
+        Ollama[("Ollama (local)<br/>nomic-embed-text")]
+        Groq[("Groq API<br/>chat LLM with tool calling")]
+        PlaidAPI[("Plaid Sandbox")]
+        SarvamAPI[("Sarvam AI<br/>saaras / bulbul")]
     end
 
-    Browser -->|HTTP/SSE| Frontend
-    
-    Auth --> APIGateway
-    Dashboard --> APIGateway
-    Transactions --> APIGateway
-    Assistant --> APIGateway
+    Browser --> Frontend
+    AuthUI --> AuthR
+    Dashboard --> TxnR
+    TxnPage --> TxnR
+    TxnPage --> PlaidR
+    Assistant --> ChatR
+    Assistant --> ConvR
+    Assistant --> VoiceR
 
-    APIGateway --> Middleware
-    APIGateway --> AuthCtrl
-    APIGateway --> ChatCtrl
-    APIGateway --> ConvCtrl
-    APIGateway --> TxnRoute
+    ChatR --> JWT
+    TxnR --> JWT
+    PlaidR --> JWT
+    VoiceR --> JWT
 
-    ChatCtrl --> IntentDetect
-    IntentDetect --> Embedding
-    Embedding --> VectorSearch
-    VectorSearch --> Summary
-    Summary --> Prompt
-    Prompt --> LLMStream
-    LLMStream --> ChatCtrl
+    ChatR --> Agent
+    Agent --> Tools
+    Agent --> RagCtx
+    Agent --> Groq
+    Tools --> Supabase
+    Tools -->|search_transactions| Ollama
+    RagCtx --> Ollama
+    RagCtx --> Supabase
 
-    AuthCtrl --> Supabase
-    ChatCtrl --> Supabase
-    ConvCtrl --> Supabase
-    TxnRoute --> Supabase
+    TxnR --> Demo --> Import
+    PlaidR --> PlaidSvc --> Import
+    PlaidSvc --> PlaidAPI
+    Import --> Supabase
+    Import --> Ollama
 
-    Embedding --> Ollama
-    LLMStream --> Ollama
-    VectorSearch --> Supabase
+    VoiceR --> Sarvam --> SarvamAPI
+    AuthR --> Supabase
+    ConvR --> Supabase
+    ChatR --> Supabase
 
-    classDef client fill:#3498db,stroke:#2980b9,color:#fff,stroke-width:2px
-    classDef frontend fill:#e74c3c,stroke:#c0392b,color:#fff,stroke-width:2px
-    classDef backend fill:#27ae60,stroke:#229954,color:#fff,stroke-width:2px
-    classDef controllers fill:#16a085,stroke:#117a65,color:#fff,stroke-width:2px
-    classDef rag fill:#f39c12,stroke:#d68910,color:#fff,stroke-width:2px
-    classDef db fill:#2c3e50,stroke:#1a252f,color:#fff,stroke-width:2px
-
-    class Client client
-    class Frontend frontend
-    class Backend backend
-    class Controllers controllers
-    class RAG rag
-    class Databases db
-    class Supabase,Ollama db
+    classDef fe fill:#e74c3c,stroke:#c0392b,color:#fff
+    classDef be fill:#27ae60,stroke:#229954,color:#fff
+    classDef ext fill:#2c3e50,stroke:#1a252f,color:#fff
+    class AuthUI,Dashboard,TxnPage,Assistant fe
+    class JWT,AuthR,ChatR,ConvR,TxnR,PlaidR,VoiceR,Agent,Tools,RagCtx,Import,Demo,PlaidSvc,Sarvam be
+    class Supabase,Ollama,Groq,PlaidAPI,SarvamAPI ext
 ```
+
 ---
 
+## 🧠 How the assistant answers
+
+### Tools mode (default)
+
+The model never sees your raw table. It decides which tool to call and with what date range. The server runs the tool against Postgres, always filtered by the signed-in user's id, and the model answers from the result.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant UI as AI Assistant page
+    participant API as POST /api/chat
+    participant Agent as chatAgent.runChat()
+    participant LLM as Groq LLM
+    participant Tools as financeTools.js
+    participant DB as Supabase
+
+    UI->>API: { message, conversationId?, language? } + Bearer JWT
+    API->>DB: load / create conversation, save user message
+    API-->>UI: SSE { conversationId }
+    API->>Agent: message + last 4 turns + userId (from JWT)
+    Agent->>DB: data overview (months, categories)
+    loop up to 3 tool rounds
+        Agent->>LLM: system prompt + history + tool schemas
+        LLM-->>Agent: tool calls, e.g. spend_by_category(from, to)
+        Agent-->>UI: SSE { status: "Checking spending by category…" }
+        Agent->>Tools: executeTool(name, args, userId)
+        Tools->>DB: transaction_stats / transactions query (user_id scoped)
+        Tools-->>Agent: JSON result (or { error } to retry)
+    end
+    LLM-->>Agent: answer tokens (streamed)
+    Agent-->>UI: SSE { token } … { token }
+    API-->>UI: SSE { done }
+    API->>DB: save assistant message
+    API-->>UI: SSE { saved }
+```
+
+| Tool | What it answers |
+|---|---|
+| `totals_for_range` | Total spent, received and net for a date range |
+| `spend_by_category` | Spending per category, largest first |
+| `top_merchants` | Merchants ranked by spend (optionally within a category) |
+| `monthly_totals` | Month-by-month totals (IST calendar months) |
+| `compare_periods` | Two periods side by side, overall or per category |
+| `list_transactions` | Filtered, sorted transactions (newest, oldest, largest, suspicious only, …) |
+| `search_transactions` | Semantic search over embeddings (e.g. "streaming services") |
+
+Dates are IST calendar days, and `to` is inclusive. The prompt carries today's date, so "last month" and "this year" resolve to exact ranges.
+
+### RAG mode (`CHAT_MODE=rag`, baseline)
+
+```
+User question
+  ├── embedText(question) via Ollama → 768-dim vector
+  ├── Supabase RPC match_transactions(): cosine similarity, scoped to user_id,
+  │     min score 0.45 → top 8 transactions
+  ├── buildFinancialSummary() over the latest 100 transactions
+  │     → totals, category breakdown, merchants
+  ├── Prompt = system rules + summary + matches + last 4 turns + question
+  └── Groq streams the answer → SSE → frontend
+```
+
+It's kept so the two approaches can be compared with the eval script (see [Evaluating the chat](#-evaluating-the-chat)).
+
+### Voice chat (optional, Sarvam AI)
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant UI as Chat input
+    participant API as Backend /api/voice
+    participant S as Sarvam AI
+    participant Chat as /api/chat
+
+    User->>UI: tap mic, speak (max 30 s), pick language or Auto
+    UI->>API: POST /transcribe?language=ta-IN|auto (webm audio)
+    API->>S: speech-to-text (saaras, codemix mode)
+    S-->>API: transcript + detected language
+    API-->>UI: { transcript, languageCode }
+    UI->>UI: transcript fills the input box (user can edit)
+    User->>UI: send
+    UI->>Chat: { message, language }
+    Chat-->>UI: reply streamed in that language, amounts as ₹ digits
+    User->>UI: tap speaker on the reply
+    UI->>API: POST /speak { text, language }
+    API->>S: text-to-speech (bulbul), markdown stripped
+    S-->>API: audio
+    API-->>UI: mp3 → plays in the browser
+```
+
+- **Languages:** English, Hindi, Tamil, Telugu, Kannada and Malayalam.
+- **Mixed speech:** `codemix` mode keeps English words like "food" or "Swiggy" in English letters inside Tamil or Hindi text, so the model can still match them to categories and merchants. For example: "last month food-ku evlo spend pannen?"
+- **Disabled without a key:** without `SARVAM_API_KEY`, the mic and speaker buttons are hidden and everything else works as usual.
+
+---
+
+## 📥 Transaction imports
+
+```mermaid
+flowchart LR
+    Demo["Demo generator<br/>student / young_professional / family"] --> N
+    Plaid["Plaid Sandbox<br/>/transactions/sync (USD → INR)"] --> N
+    N["Normalized rows<br/>externalId, amount, type,<br/>category, merchant, timestamp"] --> V[Validate]
+    V --> F["Flag suspicious<br/>&gt;4× category median<br/>or &gt; ₹2,00,000"]
+    F --> U["Upsert, ignore duplicates<br/>unique (user_id, source, external_id)"]
+    U --> E["Embed new rows<br/>Ollama, batches of 64"]
+    E --> DB[("transactions.embedding")]
+```
+
+- **Re-imports are safe:** a row that already exists is skipped.
+- **Embedding failures:** the inserted rows are kept, and the result reports `embedError`.
+- **Backfill:** rows inserted by hand, or imported while Ollama was down, can be embedded later with `node src/scripts/ingest.js`. Rows without an embedding don't show up in semantic search.
+
+---
 
 ## 📁 Folder Structure
 
 ```
 rag-finance-assistant/
+├── AGENTS.md / CLAUDE.md                 # Context for AI coding agents
+├── PROJECT_SUMMARY.md                    # Earlier design write-up (predates Groq + tools, partly outdated)
 │
 ├── backend-node/
-│   ├── .env                             # Backend environment variables
-│   ├── package.json                     # Node.js dependencies
-│   ├── server.js                        # Entry point — Express app, route registration
+│   ├── server.js                         # Express app, route registration
+│   ├── eval/questions.json               # Chat eval set (incl. Hindi/Tamil/Malayalam questions)
 │   └── src/
 │       ├── config/
-│       │   └── supabase.js              # Supabase client (service role key)
+│       │   ├── supabase.js               # Supabase client (service_role key)
+│       │   └── db.js                     # Legacy connectDB(), only logs
 │       ├── controllers/
-│       │   ├── authController.js        # Register / Login logic
-│       │   ├── chatController.js        # AI chat handler (RAG pipeline)
-│       │   ├── conversationController.js # CRUD for conversations
-│       ├── middleware/
-│       │   └── authMiddleware.js        # JWT verification middleware
-│       ├── models/
-│       │   ├── User.js                  # User data access (Supabase)
-│       │   ├── Transactions.js          # Transaction data access (Supabase)
-│       │   └── Conversations.js         # Conversation + message data access (Supabase)
+│       │   ├── authController.js         # Sign up / sign in, issues JWT
+│       │   ├── chatController.js         # POST /api/chat, SSE stream
+│       │   └── conversationController.js # Conversation CRUD
+│       ├── middleware/authMiddleware.js  # protect: verifies Bearer JWT
+│       ├── models/                       # Supabase data access (snake_case → camelCase + _id)
+│       │   ├── User.js · Transactions.js · Conversations.js · PlaidItems.js
 │       ├── routes/
-│       │   ├── authRoutes.js            # /api/auth/*
-│       │   ├── chatRoutes.js            # /api/chat
-│       │   ├── conversationRoutes.js    # /api/conversations/*
-│       │   └── transactionRoutes.js     # /api/transactions/*
+│       │   ├── authRoutes.js · chatRoutes.js · conversationRoutes.js
+│       │   ├── transactionRoutes.js      # list, demo import, delete by source
+│       │   ├── plaidRoutes.js            # link token, exchange, sync, items
+│       │   └── voiceRoutes.js            # config, transcribe, speak
+│       ├── services/
+│       │   ├── chatAgent.js              # runChat(): tools loop / rag baseline
+│       │   ├── importTransactions.js     # Shared import pipeline
+│       │   ├── demoData.js               # Seeded demo personas
+│       │   ├── plaid.js                  # Plaid client, encrypted tokens, sync
+│       │   └── sarvam.js                 # Sarvam speech to text / text to speech
 │       ├── scripts/
-│       │   └── ingest.js               # Batch embed transactions, store vectors in Postgres
+│       │   ├── ingest.js                 # Embedding backfill
+│       │   └── evalChat.js               # Runs eval/questions.json → eval/results.md
+│       ├── supabase/schema.sql           # Tables, pgvector, RPCs, RLS (run in SQL editor)
 │       └── utils/
-│           ├── aiService.js             # Prompt builder + Ollama LLM streaming
-│           ├── embedService.js          # Text → 768-dim vector (nomic-embed-text)
-│           ├── financialSummary.js      # Aggregate transactions → financial summary
-│           ├── ingestTransactions.js    # Embed & store a single transaction's vector
-│           ├── intentDetector.js        # Temporal query detection (last/first N txns)
-│           └── retrieveContext.js       # pgvector similarity search (match_transactions RPC)
+│           ├── aiService.js              # Groq client, prompts, streamCompletion
+│           ├── financeTools.js           # Tool schemas + handlers
+│           ├── embedService.js           # Text → 768-dim vector (Ollama)
+│           ├── ingestTransactions.js     # buildEmbeddingText (single embedding format)
+│           ├── retrieveContext.js        # match_transactions RPC
+│           └── financialSummary.js       # Summary for rag mode
 │
-├── frontend/
-│   ├── .env                             # Frontend environment variables
-│   ├── package.json                     # Next.js dependencies
-│   ├── next.config.ts                   # Next.js configuration
-│   ├── tsconfig.json                    # TypeScript configuration
-│   ├── postcss.config.mjs               # PostCSS (Tailwind)
-│   ├── components.json                  # shadcn/ui configuration
-│   ├── app/
-│   │   ├── (auth)/                      # Login / Register pages
-│   │   └── (root)/
-│   │       ├── layout.tsx               # Root layout with Sidebar
-│   │       ├── dashboard/               # Dashboard page (KPIs + charts) — mock data
-│   │       ├── transactions/            # Transaction list page — live API
-│   │       ├── ai-assistant/            # AI Chatbot page — live API
-│   │       ├── fraud-detection/         # Fraud Detection page (stub)
-│   │       └── app-settings/            # Settings page (stub)
-│   ├── components/
-│   │   ├── Sidebar.tsx                  # Collapsible nav sidebar + chat history
-│   │   ├── ChatHistory.tsx              # Past AI conversations in sidebar
-│   │   ├── CustomHeader.tsx             # Page header bar
-│   │   ├── CustomStats.tsx              # KPI stat cards
-│   │   └── assistant/
-│   │       ├── MessageList.tsx          # Renders chat messages
-│   │       └── ChatInput.tsx            # Chat text input
-│   ├── contexts/
-│   │   └── SidebarContext.tsx           # Global sidebar state (collapsed/expanded)
-│   ├── constants/                       # Static/mock data constants
-│   ├── lib/                             # Utility functions
-│   ├── types/
-│   │   └── chat.ts                      # TypeScript types for messages & conversations
-│   └── public/                          # Static assets
-│
-├── supabase/
-│   └── schema.sql                       # Postgres schema: tables, pgvector, RLS, match_transactions RPC
-│
-├── PROJECT_SUMMARY.md                   # Detailed project documentation
-└── README.md                            # This file
+└── frontend/
+    ├── proxy.ts                          # Next.js 16 middleware: auth redirects + matcher
+    ├── app/
+    │   ├── (auth)/sign-in · sign-up      # Public pages
+    │   ├── (root)/
+    │   │   ├── layout.tsx                # Sidebar shell
+    │   │   ├── dashboard/                # Balance, spending, savings, fraud alerts (live)
+    │   │   ├── transactions/             # Transaction table + Add data menu (live)
+    │   │   └── ai-assistant/             # SSE chat, voice, read aloud
+    │   └── api/auth/[...nextauth]/       # NextAuth Credentials → backend sign-in
+    ├── components/
+    │   ├── assistant/                    # ChatInput, MessageList, MessageBubble, MarkdownContent, TypingIndicator
+    │   ├── dashboard/                    # Dashboard cards + RangeSelect
+    │   ├── transactions/AddDataMenu.tsx  # Demo data + Plaid Link
+    │   ├── Sidebar.tsx · ChatHistory.tsx · PageShell.tsx · ThemeToggle.tsx
+    │   └── ui/                           # shadcn/ui primitives
+    ├── lib/
+    │   ├── useTransactions.ts            # Shared transactions hook
+    │   ├── dashboard.ts                  # INR formatters, range filters
+    │   ├── voice.ts · useRecorder.ts     # Voice language picker, /api/voice calls, mic recorder
+    │   └── api.ts                        # Stale, unused
+    └── types/                            # chat.ts, transaction.ts, global.d.ts
 ```
 
 ---
 
-## 🧰 Tech Stack & Dependencies
+## 🧰 Tech Stack
 
 ### Backend
 
-| Technology | Purpose | Version |
-|---|---|---|
-| **Node.js** | Runtime | v18+ |
-| **Express** | HTTP framework | 5.x |
-| **@supabase/supabase-js** | Supabase client (Postgres + pgvector) | 2.x |
-| **Axios** | HTTP client (→ Ollama API) | 1.x |
-| **jsonwebtoken** | JWT auth tokens | 9.x |
-| **bcryptjs** | Password hashing | 3.x |
-| **cors** | Cross-origin requests | 2.x |
-| **dotenv** | Environment variables | 17.x |
+| Technology | Purpose |
+|---|---|
+| **Node.js** (v18+) + **Express 5** | API server (plain JS, ES modules) |
+| **@supabase/supabase-js** | Postgres + pgvector access |
+| **groq-sdk** | Chat LLM with streaming tool calls |
+| **axios** | Ollama embeddings API |
+| **plaid** | Plaid Sandbox bank connection |
+| **jsonwebtoken** + **bcryptjs** | JWT auth, password hashing |
+| Native `fetch` / `FormData` | Sarvam AI speech APIs |
 
 ### Frontend
 
-| Technology | Purpose | Version |
-|---|---|---|
-| **Next.js** | React framework | 16.x |
-| **React** | UI library | 19.x |
-| **TypeScript** | Type safety | 5.x |
-| **Tailwind CSS** | Styling | 4.x |
-| **shadcn/ui + Radix UI** | Component library | — |
-| **Recharts** | Charts (dashboard) | 3.x |
-| **NextAuth** | Authentication (JWT) | 4.x |
-| **Lucide React** | Icons | — |
+| Technology | Purpose |
+|---|---|
+| **Next.js 16** (App Router) + **React 19** + **TypeScript** | App framework |
+| **Tailwind CSS v4** + **shadcn/ui** (Radix) | Styling and components, light/dark theme |
+| **NextAuth v4** | Credentials sign-in holding the backend JWT |
+| **Recharts** | Dashboard charts |
+| **react-markdown** + **remark-gfm** | Rendering assistant replies |
+| **react-plaid-link** | Plaid Link widget |
+| **sonner** · **lucide-react** | Toasts, icons |
 
-### Infrastructure (External Services)
+### External services
 
-| Service | Purpose | Default URL |
+| Service | Used for | Required? |
 |---|---|---|
-| **Supabase** | Postgres database + pgvector (users, transactions, conversations, messages, embeddings) | `https://<your-project>.supabase.co` |
-| **Ollama** | Local LLM + embeddings | `http://localhost:11434` |
+| **Supabase** | Postgres + pgvector, all app data | Yes |
+| **Groq** | Chat LLM (`GROQ_MODEL`, must support tool calling) | Yes |
+| **Ollama** (local) | `nomic-embed-text` embeddings only | Yes (for embedding and semantic search) |
+| **Plaid Sandbox** | Test bank connection | Optional |
+| **Sarvam AI** | Voice: speech to text and text to speech in Indian languages | Optional |
 
 ---
 
 ## 📋 Prerequisites
 
-Install these before running the project:
+### 1. Node.js v18+
 
-### 1. Node.js (v18+)
 ```bash
-# Download from https://nodejs.org/
-node --version    # verify: v18.x or higher
-npm --version     # verify: 9.x or higher
+node --version    # v18.x or higher (native fetch / FormData are used)
 ```
 
-### 2. Supabase Project (Postgres + pgvector)
+### 2. Supabase project
+
+1. Create a project at https://supabase.com.
+2. In the **SQL Editor**, run `backend-node/src/supabase/schema.sql`. It creates:
+   - the tables (`users`, `transactions`, `conversations`, `messages`, `plaid_items`)
+   - the `vector` extension and the HNSW index
+   - the `match_transactions` and `transaction_stats` RPCs. Tools-mode chat fails without `transaction_stats`.
+   - the RLS policies
+
+   If your database predates the `source` / `external_id` columns, run the migration commented at the bottom of the file.
+3. Under **Project Settings → API**, copy the Project URL into `SUPABASE_URL` and the **service_role** key into `SUPABASE_SERVICE_ROLE_KEY`.
+
+> **Use the service_role key, not the anon key.** The app uses its own JWT, not Supabase Auth, so `auth.uid()` is always NULL. With the anon key, RLS would silently return zero rows. Because RLS is bypassed, every backend query filters by `user_id` itself.
+
+There's no migration tooling. Schema changes are applied by hand in the SQL editor.
+
+### 3. Ollama (embeddings only)
+
 ```bash
-# 1. Create a free account at https://supabase.com
-# 2. Create a new project (note the database password you set)
-# 3. In the SQL Editor, run supabase/schema.sql from this repo —
-#    it enables the pgcrypto and vector extensions, creates the
-#    users / transactions / conversations / messages tables, the
-#    HNSW index, the match_transactions RPC function, and RLS policies
-# 4. Go to Project Settings → API and copy:
-#      - Project URL                 → SUPABASE_URL
-#      - service_role secret key     → SUPABASE_SERVICE_ROLE_KEY
-#
-# IMPORTANT: use the service_role key, NOT the anon/public key.
-# This backend authenticates users with its own JWT (not Supabase Auth),
-# so Postgres's auth.uid() is always NULL for these requests — using the
-# anon key means every RLS-protected table silently returns zero rows.
-```
-
-### 3. Ollama (Local LLM)
-```bash
-# Download from https://ollama.com/download
-
-# Pull required models
-ollama pull qwen2.5:7b          # LLM for chat responses
-ollama pull nomic-embed-text     # Embedding model (768-dim)
-
-# Verify
+# https://ollama.com/download
+ollama pull nomic-embed-text   # 768-dim embedding model
 ollama list
 ```
+
+The chat model runs on Groq, so you don't need a local LLM.
+
+### 4. API keys
+
+- **Groq:** https://console.groq.com/keys (required)
+- **Plaid:** https://dashboard.plaid.com/developers/keys (optional, Sandbox keys)
+- **Sarvam AI:** https://dashboard.sarvam.ai (optional, for voice)
 
 ---
 
 ## ⚙️ Environment Variables
 
-### Backend — `backend-node/.env`
+### Backend: `backend-node/.env`
 
 ```env
 # Server
 PORT=5000
 
-# Supabase
+# Supabase (service_role key, see above)
 SUPABASE_URL=https://<your-project>.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key_here
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
 
-# JWT secret key (use a strong random string)
-JWT_SECRET=your_jwt_secret_key_here
+# JWT secret (long random string)
+JWT_SECRET=your_jwt_secret
 
-# Ollama API base URL
+# Ollama (embeddings)
 OLLAMA_URL=http://localhost:11434
 
-# Backend URL (self-reference)
-BACKEND_URL=http://localhost:5000
-
 # Groq (chat LLM)
-GROQ_API_KEY=your_groq_api_key_here
+GROQ_API_KEY=your_groq_api_key
+# GROQ_MODEL=qwen/qwen3.8-27b     # optional, must support tool calling
+# CHAT_MODE=tools                  # optional: tools (default) | rag (baseline)
 
-# Plaid Sandbox (optional — enables "Connect bank" on the Transactions page)
-# Free keys: https://dashboard.plaid.com/developers/keys
+# Plaid Sandbox (optional, enables "Connect bank")
 PLAID_CLIENT_ID=your_plaid_client_id
 PLAID_SECRET=your_plaid_sandbox_secret
 PLAID_ENV=sandbox
-# 32-byte hex key used to encrypt stored Plaid access tokens:
+# 32-byte hex key that encrypts stored Plaid access tokens (AES-256-GCM):
 #   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 PLAID_TOKEN_KEY=64_hex_chars
-# Plaid sandbox data is USD; amounts are converted at this fixed rate
-USD_TO_INR=83
+USD_TO_INR=83                      # Plaid sandbox amounts are USD
+
+# Sarvam AI voice (optional, enables the mic and read aloud)
+SARVAM_API_KEY=your_sarvam_api_key
+# SARVAM_STT_MODEL=saaras:v3
+# SARVAM_STT_MODE=codemix          # or: transcribe
+# SARVAM_TTS_MODEL=bulbul:v3
+# SARVAM_TTS_SPEAKER=shubh         # must be valid for the TTS model
 ```
 
-### Frontend — `frontend/.env`
+If the Plaid variables are missing, `/api/plaid/*` returns 503 and the bank actions are hidden. If `SARVAM_API_KEY` is missing, the voice buttons are hidden. Restart the backend after editing `.env`.
+
+### Frontend: `frontend/.env`
 
 ```env
-# Backend API URL
 NEXT_PUBLIC_BACKEND_URL=http://localhost:5000
-
-# NextAuth configuration
 NEXTAUTH_URL=http://localhost:3000
-NEXTAUTH_SECRET=your_nextauth_secret_key_here
+NEXTAUTH_SECRET=your_nextauth_secret
 ```
 
 ---
 
 ## 🚀 Getting Started
 
-### Step 1: Start External Services
-
 ```bash
-
-# Terminal 1 — Ollama (with performance tuning)
-set OLLAMA_KEEP_ALIVE=-1
-set OLLAMA_NUM_THREADS=8
-set OLLAMA_MAX_LOADED_MODELS=2
+# Terminal 1: Ollama
 ollama serve
-```
 
-> Supabase is a hosted cloud service — there's no local container to start. Just make sure `supabase/schema.sql` has already been run once in the SQL Editor (see Prerequisites above).
-
-### Step 2: Setup & Run Backend
-
-```bash
-# Terminal 2
+# Terminal 2: backend
 cd backend-node
-
-# Install dependencies
 npm install
+npm run dev            # nodemon on PORT (5000)
 
-# Create .env file (see template above)
-# Then start the server
-npm run dev   # nodemon, auto-restarts on changes
-# or: node server.js
-```
-
-You should see:
-```
-Supabase Connected
-Server running
-```
-
-### Step 3: Add Transactions
-
-Sign in, open **Transactions**, and use **Add data**:
-
-- **Load demo data** — generates 6 months of realistic INR transactions for a student, young-professional or family persona, including a few deliberately suspicious ones.
-- **Connect bank** — opens Plaid Link in Sandbox mode (needs the `PLAID_*` variables). Log in with username `user_transactions_dynamic` and any password. Plaid sandbox amounts are USD and are converted to INR.
-
-Imported rows are embedded immediately, so the assistant can search them right away.
-
-**Backfill only:** if you insert rows by hand in Supabase, or an import ran while Ollama was down, embed them with:
-
-```bash
-# Terminal 3
-cd backend-node
-node src/scripts/ingest.js
-```
-
-You should see:
-```
-Found X transactions to ingest.
-Ingestion Complete.
-```
-
-### Step 4: Setup & Run Frontend
-
-```bash
-# Terminal 4
+# Terminal 3: frontend
 cd frontend
-
-# Install dependencies
 npm install
-
-# Start development server
-npm run dev
+npm run dev            # http://localhost:3000
 ```
 
-You should see:
-```
-▲ Next.js 16.x
-- Local: http://localhost:3000
-```
+Then:
 
-### Step 5: Open the App
+1. **Sign up** at `/sign-up` and **sign in**.
+2. Open **Transactions → Add data**:
+   - **Load demo data:** 6 months of realistic INR transactions for a student, young professional or family persona, including a few deliberately suspicious ones.
+   - **Connect bank:** Plaid Link in Sandbox mode. Log in with `user_transactions_dynamic` and any password.
 
-Navigate to **http://localhost:3000** in your browser.
-
-1. **Sign up** a new account at `/sign-up`
-2. **Sign in** at `/sign-in`
-3. Go to **Transactions** to confirm your seeded data is showing up
-4. Go to **AI Assistant** and start chatting with your financial data
+   Imported rows are embedded right away.
+3. Check the **Dashboard**, then ask the **AI Assistant** things like "How much did I spend on food last month?" or "Compare my spending with the month before". With Sarvam configured, tap the mic and ask in your language.
 
 ---
 
-## 🖥️ Execution Commands Reference
+## 🧪 Evaluating the chat
+
+There is no unit test suite. The chat eval runs `backend-node/eval/questions.json` against a user who has **young_professional** demo data. For each question it calls the tools directly to get the ground truth, then checks that the right numbers and names appear in the answer:
+
+```bash
+cd backend-node
+node src/scripts/evalChat.js --email you@example.com [--modes rag,tools] [--only 1,4,21]
+# → writes eval/results.md
+```
+
+Questions with a `language` field (Hindi, Tamil, Tamil + English, Malayalam) are sent the same way voice input is.
+
+---
+
+## 🖥️ Commands Reference
 
 | Action | Command | Directory |
 |---|---|---|
-| **Install backend deps** | `npm install` | `backend-node/` |
-| **Start backend (dev)** | `npm run dev` | `backend-node/` |
-| **Start backend (plain node)** | `node server.js` | `backend-node/` |
-| **Ingest transactions** | `node src/scripts/ingest.js` | `backend-node/` |
-| **Install frontend deps** | `npm install` | `frontend/` |
-| **Start frontend (dev)** | `npm run dev` | `frontend/` |
-| **Build frontend** | `npm run build` | `frontend/` |
-| **Start frontend (prod)** | `npm run start` | `frontend/` |
-| **Start Ollama** | `ollama serve` | anywhere |
-| **Pull LLM model** | `ollama pull qwen2.5:7b` | anywhere |
-| **Pull embedding model** | `ollama pull nomic-embed-text` | anywhere |
-| **List Ollama models** | `ollama list` | anywhere |
-| **Check loaded models** | `ollama ps` | anywhere |
+| Start backend (dev) | `npm run dev` | `backend-node/` |
+| Embedding backfill | `node src/scripts/ingest.js` | `backend-node/` |
+| Chat eval | `node src/scripts/evalChat.js --email <user>` | `backend-node/` |
+| Start frontend (dev) | `npm run dev` | `frontend/` |
+| Build / start frontend | `npm run build` / `npm run start` | `frontend/` |
+| Lint frontend | `npm run lint` | `frontend/` |
+| Start Ollama | `ollama serve` | anywhere |
+| Pull embedding model | `ollama pull nomic-embed-text` | anywhere |
 
----
-
-## 🔧 Ollama Performance Tuning (CPU-only)
-
-If running without a GPU, set these environment variables **before** starting Ollama:
-
-```bash
-set OLLAMA_KEEP_ALIVE=-1            # Keep model loaded in RAM permanently
-set OLLAMA_NUM_THREADS=8            # Match your CPU core count
-set OLLAMA_MAX_LOADED_MODELS=2      # Keep LLM + embedding model both loaded
-ollama serve
-```
-
-### Recommended Models by Hardware
-
-| Hardware | LLM Model | Expected Response Time |
-|---|---|---|
-| GPU (6GB+ VRAM) | `qwen2.5:7b` | ~3-8s |
-| CPU (16GB+ RAM) | `qwen2.5:7b` | ~15-25s |
-| CPU (8GB RAM) | `qwen2.5:3b` | ~10-15s |
-| CPU (low-end) | `phi3:mini` | ~10-18s |
+Optional Ollama tip: set `OLLAMA_KEEP_ALIVE=-1` before `ollama serve` so the embedding model stays loaded between requests.
 
 ---
 
@@ -445,85 +481,57 @@ ollama serve
 
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
-| `POST` | `/api/auth/signup` | — | Register a new user |
-| `POST` | `/api/auth/signin` | — | Login, returns a JWT token |
-| `POST` | `/api/chat` | ✅ JWT | Send message to AI (SSE streaming response) |
-| `GET` | `/api/conversations` | ✅ JWT | Get all conversations for the authenticated user |
-| `GET` | `/api/conversations/:id` | ✅ JWT | Get a single conversation with its messages |
-| `POST` | `/api/conversations` | ✅ JWT | Create a new conversation |
-| `POST` | `/api/conversations/:id/messages` | ✅ JWT | Append a message to a conversation |
-| `PATCH` | `/api/conversations/:id/title` | ✅ JWT | Rename a conversation |
-| `DELETE` | `/api/conversations/:id` | ✅ JWT | Delete a conversation |
-| `GET` | `/api/transactions` | ✅ JWT | Get the authenticated user's transactions |
-| `POST` | `/api/transactions/demo` | ✅ JWT | Generate + import synthetic INR data (`{ persona, months }`) |
-| `DELETE` | `/api/transactions?source=demo\|plaid` | ✅ JWT | Remove imported data from one source (`plaid` also unlinks the bank) |
-| `GET` | `/api/plaid/items` | ✅ JWT | List linked sandbox banks |
-| `POST` | `/api/plaid/link-token` | ✅ JWT | Create a Plaid Link token |
-| `POST` | `/api/plaid/exchange` | ✅ JWT | Exchange Link's public token, store the item, import transactions |
-| `POST` | `/api/plaid/sync` | ✅ JWT | Pull new transactions for every linked bank |
-
----
-
-## 🧠 How RAG Works in This Project
-
-```
-User: "give me my last 5 transactions"
-  │
-  ├── Intent Detection → Temporal query detected (last 5)
-  │     └── Supabase: transactions.select().order('timestamp', desc).limit(5)
-  │
-  ├── Financial Summary built from last 100 transactions
-  │     └── { totalCredit, totalDebit, balance, categoryMap, merchants }
-  │
-  ├── Prompt assembled: System Role + History + Financial Context + Instructions + Question
-  │
-  └── Ollama streams response token-by-token via SSE → Frontend renders live
-
-
-User: "how much did I spend at Amazon?"
-  │
-  ├── Intent Detection → Not temporal, use semantic search
-  │     └── embedText() → 768-dim vector
-  │     └── Supabase RPC match_transactions(): pgvector cosine similarity
-  │         search (scoped to user_id, min score 0.45) → top 8 transactions
-  │
-  ├── Financial Summary built from last 100 transactions
-  │
-  ├── Prompt assembled with retrieved Amazon-related transactions
-  │
-  └── Ollama streams response via SSE → Frontend renders live
-```
+| `POST` | `/api/auth/signup` | none | Register a new user |
+| `POST` | `/api/auth/signin` | none | Sign in, returns a JWT |
+| `POST` | `/api/chat` | JWT | Chat turn, SSE stream: `{conversationId}` → `{status}`* → `{token}`* → `{done}` → `{saved}` (`{error}` on failure). Body: `{ message, conversationId?, language? }` |
+| `GET` | `/api/conversations?userId=` | ⚠️ none | List a user's conversations |
+| `GET` | `/api/conversations/:id?userId=` | ⚠️ none | One conversation with its messages |
+| `POST` | `/api/conversations` | ⚠️ none | Create a conversation |
+| `POST` | `/api/conversations/:id/messages` | ⚠️ none | Append a message |
+| `PATCH` | `/api/conversations/:id/title` | ⚠️ none | Rename a conversation |
+| `DELETE` | `/api/conversations/:id` | ⚠️ none | Delete a conversation (messages cascade) |
+| `GET` | `/api/transactions` | JWT | Latest 100 transactions, newest first |
+| `POST` | `/api/transactions/demo` | JWT | Generate and import demo data `{ persona, months }` |
+| `DELETE` | `/api/transactions?source=demo\|plaid` | JWT | Remove one source's data (`plaid` also unlinks banks) |
+| `GET` | `/api/plaid/items` | JWT | Linked sandbox banks |
+| `POST` | `/api/plaid/link-token` | JWT | Token for Plaid Link |
+| `POST` | `/api/plaid/exchange` | JWT | Exchange the public token, store the item, import |
+| `POST` | `/api/plaid/sync` | JWT | Pull new transactions for every linked bank |
+| `GET` | `/api/voice/config` | JWT | `{ enabled, languages }` |
+| `POST` | `/api/voice/transcribe?language=<code\|auto>` | JWT | Raw audio body (≤5 MB) → `{ transcript, languageCode }` |
+| `POST` | `/api/voice/speak` | JWT | `{ text, language }` → `audio/mpeg` |
 
 ---
 
 ## 🔒 Security and Limitations
 
 ### Security
-- **JWT Authentication** — All protected routes require a valid JWT token. Tokens are signed with a secret key and verified on each request.
-- **Password Hashing** — User passwords are hashed with bcrypt before being stored in Supabase.
-- **Service Role Key (Backend Only)** — The backend uses Supabase's `service_role` key, which bypasses Row Level Security. Authorization is enforced entirely by the Express JWT middleware, not by Supabase Auth/RLS. This key must **never** be exposed to the frontend.
-- **Row Level Security (Scaffolded)** — RLS policies exist on `transactions`, `conversations`, and `messages` for future adoption of Supabase Auth, but are currently bypassed by the service role key.
-- **Environment Variables** — Sensitive credentials (Supabase URL/service role key, JWT secret, NextAuth secret) are stored in `.env` files and should **never** be committed to version control.
-- **CORS** — Cross-origin requests are restricted via the `cors` middleware configuration.
+- **JWT auth:** chat, transactions, Plaid and voice routes require `Authorization: Bearer <token>`. The chat tools read the user id from the verified token, never from the request body or the model.
+- **Passwords** are hashed with bcrypt.
+- **Service role key (backend only):** it bypasses RLS, so every query filters by `user_id` explicitly. Never expose this key to the frontend.
+- **RLS policies** exist in the schema for a possible future move to Supabase Auth, but the service role key bypasses them today.
+- **Plaid access tokens** are stored encrypted with AES-256-GCM (`PLAID_TOKEN_KEY`).
+- **Secrets** live in `.env` files, which must never be committed.
 
-### Limitations
-- **Local LLM Only** — The AI assistant relies on Ollama running locally; there is no cloud LLM fallback. Response quality and speed depend on your hardware.
-- **Single-User Focused** — While multi-user auth is supported, there is no role-based access control or admin panel.
-- **Dashboard Not Yet Live** — The Dashboard page currently renders mock/constant data and is not wired to the live API (Transactions and AI Assistant are).
+### Known limitations
+- **`/api/conversations/*` is not protected.** It trusts a `userId` from the query or body. Putting it behind `protect` is the main open security fix.
+- **CORS is open.** `cors()` runs with defaults and accepts any origin. Restrict it before deploying.
+- **Plaid sync** only applies `added` transactions. `modified` and `removed` are still a TODO.
+- **The Transactions page and dashboard** load the latest 100 transactions. The assistant's tools see the full history.
+- **Voice quality** depends on Sarvam. Malayalam and Kannada are the least tested, and recordings are capped at 30 seconds.
+- **Missing pages:** `fraud-detection` and `app-settings` are listed in the route matcher but have no pages yet.
+- **No role-based access** or admin panel.
 
 ---
 
 ## 🤝 Contributions
 
-Contributions are welcome! To contribute:
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/your-feature`)
+3. Commit your changes
+4. Push and open a Pull Request
 
-1. **Fork** the repository
-2. **Create** a feature branch (`git checkout -b feature/your-feature`)
-3. **Commit** your changes (`git commit -m "Add your feature"`)
-4. **Push** to your branch (`git push origin feature/your-feature`)
-5. **Open** a Pull Request
-
-Please ensure your code follows the existing project structure and conventions. For major changes, open an issue first to discuss the proposed changes.
+See [AGENTS.md](AGENTS.md) for architecture notes and conventions. For major changes, open an issue first.
 
 ---
 

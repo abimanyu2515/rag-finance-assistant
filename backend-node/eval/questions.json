@@ -1,5 +1,5 @@
 {
-  "_readme": "Eval set for scripts/evalChat.js. Written for the young_professional demo persona (6 months). {{placeholders}} are resolved to IST dates at run time. truth = a tool call whose result is the ground truth. expect.numbers / expect.texts = paths into that result that must appear in the answer (arr[key=value] picks an item, arr[0] by index). No expect = graded by hand.",
+  "_readme": "Eval set for scripts/evalChat.js. Written for the young_professional demo persona (6 months). {{placeholders}} are resolved to IST dates at run time. truth = a tool call whose result is the ground truth. expect.numbers / expect.texts = paths into that result that must appear in the answer (arr[key=value] picks an item, arr[0] by index). No expect = graded by hand. Optional \"language\" (e.g. \"ta-IN\") is passed to runChat like voice input; those questions expect only numbers, since names may be translated.",
   "questions": [
     {
       "id": 1,
@@ -139,6 +139,38 @@
       "question": "How much have I paid for electricity this year?",
       "truth": { "tool": "top_merchants", "args": { "from": "{{year_start}}", "to": "{{today}}", "category": "Bills", "limit": 20 } },
       "expect": { "numbers": ["merchants[merchant=BESCOM Electricity].total"] }
+    },
+    {
+      "id": 21,
+      "kind": "language",
+      "language": "hi-IN",
+      "question": "पिछले महीने मैंने कुल कितना खर्च किया?",
+      "truth": { "tool": "totals_for_range", "args": { "from": "{{last_month_start}}", "to": "{{last_month_end}}" } },
+      "expect": { "numbers": ["total_debit"] }
+    },
+    {
+      "id": 22,
+      "kind": "language",
+      "language": "ta-IN",
+      "question": "போன மாசம் எந்த category-ல அதிகமா செலவு பண்ணேன்? எவ்வளவு?",
+      "truth": { "tool": "spend_by_category", "args": { "from": "{{last_month_start}}", "to": "{{last_month_end}}" } },
+      "expect": { "numbers": ["categories[0].total"] }
+    },
+    {
+      "id": 23,
+      "kind": "language",
+      "language": "ta-IN",
+      "question": "last month food-ku evlo spend pannen?",
+      "truth": { "tool": "spend_by_category", "args": { "from": "{{last_month_start}}", "to": "{{last_month_end}}" } },
+      "expect": { "numbers": ["categories[category=Food].total"] }
+    },
+    {
+      "id": 24,
+      "kind": "language",
+      "language": "ml-IN",
+      "question": "കഴിഞ്ഞ മാസം എനിക്ക് എത്ര പണം വന്നു?",
+      "truth": { "tool": "totals_for_range", "args": { "from": "{{last_month_start}}", "to": "{{last_month_end}}" } },
+      "expect": { "numbers": ["total_credit"] }
     }
   ]
 }
